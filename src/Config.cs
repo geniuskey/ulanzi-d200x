@@ -92,9 +92,9 @@ namespace UlanziLite {
                 g.SmoothingMode=SmoothingMode.AntiAlias;
                 g.SetClip(new Rectangle(0,0,196,WideArtwork.SafeHeight));
                 bool drawn=false;
-                if(!String.IsNullOrWhiteSpace(key.Image))try {using(var img=System.Drawing.Image.FromFile(key.Image)) {g.DrawImage(img,new Rectangle(50,25,96,96)); drawn=true;}}catch { }
+                if(!String.IsNullOrWhiteSpace(key.Image))try {using(var img=System.Drawing.Image.FromFile(key.Image)) {float scale=Math.Min(96f/img.Width,96f/img.Height);float w=img.Width*scale,h=img.Height*scale;g.DrawImage(img,50+(96-w)/2,25+(96-h)/2,w,h); drawn=true;}}catch { }
                 if(!drawn && key.Kind=="website")using(var icon=(websiteIcons??WebsiteIconCache.Shared).GetIcon(key))if(icon!=null){g.DrawImage(icon,new Rectangle(50,25,96,96));drawn=true;}
-                if(!drawn && key.Kind=="application" && File.Exists(key.Target))try {using(var icon=Icon.ExtractAssociatedIcon(key.Target))if(icon!=null) { g.DrawIcon(icon,new Rectangle(58,30,80,80)); drawn=true; }}catch { }
+                if(!drawn && key.Kind=="application" && (File.Exists(key.Target) || Directory.Exists(key.Target)))try {using(var icon=ApplicationIcons.Load(key.Target))if(icon!=null) { g.DrawIcon(icon,new Rectangle(50,25,96,96)); drawn=true; }}catch { }
                 if(!drawn)using(var font=new Font("Segoe UI",46,FontStyle.Bold)) {
                     string mark=String.IsNullOrWhiteSpace(key.Target)?"+":(String.IsNullOrWhiteSpace(key.Label)?"?":System.Globalization.StringInfo.GetNextTextElement(key.Label));
                     g.DrawString(mark,font,Brushes.White,new RectangleF(0,17,196,105),new StringFormat {Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center});

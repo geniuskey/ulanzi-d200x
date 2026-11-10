@@ -87,10 +87,11 @@ namespace UlanziLite {
             for(int i=0;i<5;i++)grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent,20));
             for(int i=0;i<2;i++)grid.RowStyles.Add(new RowStyle(SizeType.Percent,50));
             for(int i=0;i<13;i++) {
-                int k=i;var b=ButtonAt(i<10?(Control)grid:deckPanel,"",i<10?0:18+(i-10)*149,i<10?0:321,i<10?136:135,101,()=>{if(k>=10){TryLaunch(UsageMeters.Binding(k-10));return;}selected=k;PaintSelection();LoadKey();});keys[i]=b;
-                if(i<10){b.Dock=DockStyle.Fill;b.Margin=new Padding(5);grid.SetCellPosition(b,new TableLayoutPanelCellPosition(i%5,i/5));}
+                int k=i;var b=ButtonAt(i<10?(Control)grid:deckPanel,"",i<10?0:35+(i-10)*149,i<10?0:321,99,99,()=>{if(k>=10){TryLaunch(UsageMeters.Binding(k-10));return;}selected=k;PaintSelection();LoadKey();});keys[i]=b;
+                if(i<10){b.Anchor=AnchorStyles.None;b.Margin=new Padding(5);grid.SetCellPosition(b,new TableLayoutPanelCellPosition(i%5,i/5));}
                 b.BackgroundImageLayout=ImageLayout.Zoom;b.AccessibleName="버튼 "+(i+1);tips.SetToolTip(b,k>=10?UsageMeters.Names[k-10]+" 사용량 · 클릭하여 사용량 페이지 열기":"클릭하여 편집 · 저장 후 장치 버튼으로 실행");
             }
+            grid.Layout+=(s,e)=>{int side=Math.Max(1,Math.Min(grid.ClientSize.Width/5,grid.ClientSize.Height/2)-10);for(int i=0;i<10;i++)keys[i].Size=new Size(side,side);};
             TextAt(deckPanel,"AI 구독 사용량",18,299,220,20,8,Color.FromArgb(172,187,205));
             TextAt(deckPanel,"장치 가로 화면",470,299,260,20,8,Color.FromArgb(172,187,205));
             widePreview=new PictureBox {Location=new Point(470,321),Size=new Size(288,101),BackColor=background,SizeMode=PictureBoxSizeMode.Zoom,AccessibleName="가로 화면: 시계 / 세 노브 볼륨",Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right};deckPanel.Controls.Add(widePreview);PreviewClock();
