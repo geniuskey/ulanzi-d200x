@@ -1,0 +1,31 @@
+name: Windows build and checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, verify and package
+        shell: pwsh
+        run: ./package.ps1
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification
+          path: |
+            dist/test-results.txt
+            dist/preview.png
+          if-no-files-found: warn
+      - name: Upload portable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: UlanziLite-win-x64
+          path: |
+            dist/*.zip
+            dist/*.sha256

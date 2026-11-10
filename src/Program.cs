@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,14 +11,14 @@ namespace UlanziLite {
         public static void Log(string text) {
             lock(logLock)try {
                 string path=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"ulanzi-lite.log");
-                if(File.Exists(path) && new FileInfo(path).Length>512*1024)File.Move(path,path+"."+DateTime.Now.ToString("yyyyMMddHHmmss")+".old");
+                if(File.Exists(path) && new FileInfo(path).Length>512*1024){if(File.Exists(path+".old"))File.Delete(path+".old");File.Move(path,path+".old");}
                 File.AppendAllText(path,DateTime.Now.ToString("s")+" "+text+Environment.NewLine,Encoding.UTF8);
             }catch { }
         }
         [STAThread] static int Main(string[] args) {
             if(args.Contains("--render")) {
                 Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);
-                using(var form=new MainForm(Configuration.Load(),true)) {
+                using(var form=new MainForm(Configuration.Defaults(),true)) {
                     form.Show();Application.DoEvents();using(var bitmap=new System.Drawing.Bitmap(form.Width,form.Height)) {
                         form.DrawToBitmap(bitmap,new System.Drawing.Rectangle(0,0,form.Width,form.Height));
                         bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"preview.png"));

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -61,7 +61,9 @@ namespace UlanziLite {
             Buffer.BlockCopy(BitConverter.GetBytes(length),0,p,4,4); Buffer.BlockCopy(body,0,p,8,body.Length); return p;
         }
         public static bool Parse(byte[] p, int count, out int index, out int state) {
-            index=state=-1; int start = count>=13 && p[0]==0 ? 1 : 0;
+            index=state=-1;
+            if(p==null || count<0 || count>p.Length)return false;
+            int start = count>=13 && p[0]==0 ? 1 : 0;
             if (count-start<12 || p[start]!=0x7c || p[start+1]!=0x7c || p[start+2]!=1 || (p[start+3]!=1 && p[start+3]!=2)) return false;
             uint length = BitConverter.ToUInt32(p,start+4); if (length<4 || length>count-start-8) return false;
             index=p[start+9]; state=p[start+11]; return true;

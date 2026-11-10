@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -14,16 +14,19 @@ using System.Web.Script.Serialization;
 namespace UlanziLite {
     public class KeyBinding {
         public string Label="빈 버튼", Kind="website", Target="", Image="", Color="#273349";
-        public void Validate() {
+        public void Validate(bool validateImage=true) {
+            if(Label==null || Label.Length>40)throw new ArgumentException("이름은 40자까지 입력해 주세요.");
+            if(Kind!="website" && Kind!="application")throw new ArgumentException("지원하지 않는 버튼 종류입니다.");
+            try { System.Drawing.ColorTranslator.FromHtml(Color); }catch {throw new ArgumentException("버튼 색상 형식이 올바르지 않습니다.");}
+            if(validateImage && !String.IsNullOrWhiteSpace(Image)) {
+                if(!File.Exists(Image))throw new ArgumentException("아이콘 이미지 파일을 찾을 수 없습니다. 다시 선택하거나 비워 주세요.");
+                try {using(var img=System.Drawing.Image.FromFile(Image)) { }}catch {throw new ArgumentException("이미지를 읽을 수 없습니다. PNG, JPG 또는 BMP 파일을 선택해 주세요.");}
+            }
             if(String.IsNullOrWhiteSpace(Target))return;
             if(Kind=="website") { Uri uri; if(!Uri.TryCreate(Target,UriKind.Absolute,out uri) || (uri.Scheme!="https" && uri.Scheme!="http") || String.IsNullOrEmpty(uri.Host))throw new ArgumentException("http:// 또는 https:// 주소를 입력해 주세요."); }
             else if(Kind=="application") { if(!File.Exists(Target) && !Directory.Exists(Target))throw new ArgumentException("앱 또는 파일 경로를 찾을 수 없습니다."); }
-            else throw new ArgumentException("지원하지 않는 버튼 종류입니다.");
-            if(Label.Length>40)throw new ArgumentException("이름은 40자까지 입력해 주세요.");
-            System.Drawing.ColorTranslator.FromHtml(Color);
-            if(!String.IsNullOrWhiteSpace(Image))using(var img=System.Drawing.Image.FromFile(Image)) { }
         }
-        public void Launch() { Validate(); if(!String.IsNullOrWhiteSpace(Target))Process.Start(new ProcessStartInfo(Target) {UseShellExecute=true}); }
+        public void Launch() { Validate(false); if(!String.IsNullOrWhiteSpace(Target))Process.Start(new ProcessStartInfo(Target) {UseShellExecute=true}); }
     }
     public class DeckPage { public string Name; public List<KeyBinding> Keys=new List<KeyBinding>(); }
     public class Configuration {
@@ -57,14 +60,24 @@ namespace UlanziLite {
         }
         public static Configuration Load() {
             if(!File.Exists(PathName))return Defaults();
-            var c=Json.Deserialize<Configuration>(File.ReadAllText(PathName,Encoding.UTF8));
+            return Parse(File.ReadAllText(PathName,Encoding.UTF8));
+        }
+        public static Configuration Parse(string text) {
+            Configuration c;
+            try {c=Json.Deserialize<Configuration>(text);}catch(Exception ex){throw new InvalidDataException("설정 JSON을 읽을 수 없습니다. settings.json.bak으로 복구할 수 있습니다.",ex);}
             if(c==null || c.Version!=1 || c.Pages==null || c.Pages.Count==0 || c.Pages.Count>20)throw new InvalidDataException("설정 파일 형식이 올바르지 않습니다.");
-            foreach(var p in c.Pages) { if(p==null || p.Keys==null || p.Keys.Count!=13 || p.Keys.Any(k=>k==null))throw new InvalidDataException("페이지에 버튼 13개가 필요합니다."); foreach(var k in p.Keys) { k.Label=k.Label??""; k.Target=k.Target??""; k.Image=k.Image??""; if(k.Color==null)k.Color="#273349"; } }
+            foreach(var p in c.Pages) { if(p==null || p.Keys==null || p.Keys.Count!=13 || p.Keys.Any(k=>k==null))throw new InvalidDataException("페이지에 버튼 13개가 필요합니다."); if(String.IsNullOrWhiteSpace(p.Name))p.Name="페이지 "+(c.Pages.IndexOf(p)+1); foreach(var k in p.Keys) { k.Label=k.Label??""; k.Target=k.Target??""; k.Image=k.Image??""; if(k.Color==null)k.Color="#273349"; if(k.Kind!="website" && k.Kind!="application")throw new InvalidDataException("지원하지 않는 버튼 종류입니다."); } }
             c.Page=Math.Max(0,Math.Min(c.Pages.Count-1,c.Page)); c.Step=Math.Max(1,Math.Min(10,c.Step)); c.Brightness=Math.Max(0,Math.Min(100,c.Brightness));c.OverlaySeconds=Math.Max(1,Math.Min(30,c.OverlaySeconds)); return c;
         }
         public void Save() {
-            string temp=PathName+".tmp"; File.WriteAllText(temp,Json.Serialize(this),new UTF8Encoding(false));
-            if(File.Exists(PathName))File.Replace(temp,PathName,PathName+".bak"); else File.Move(temp,PathName);
+            SaveTo(PathName);
+        }
+        public void SaveTo(string path) {
+            string temp=path+".tmp";
+            try {
+                File.WriteAllText(temp,Json.Serialize(this),new UTF8Encoding(false));
+                if(File.Exists(path))File.Replace(temp,path,path+".bak"); else File.Move(temp,path);
+            } finally {if(File.Exists(temp))File.Delete(temp);}
         }
     }
     public static class Artwork {
@@ -74,6 +87,10 @@ namespace UlanziLite {
                 g.SmoothingMode=SmoothingMode.AntiAlias; g.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                 Color color; try {color=ColorTranslator.FromHtml(key.Color);}catch {color=Color.FromArgb(39,51,73);}
                 g.Clear(color);
+                g.SmoothingMode=SmoothingMode.None;
+                using(var safeEdge=new SolidBrush(System.Drawing.Color.FromArgb(11,16,24)))g.FillRectangle(safeEdge,0,WideArtwork.SafeHeight,196,196-WideArtwork.SafeHeight);
+                g.SmoothingMode=SmoothingMode.AntiAlias;
+                g.SetClip(new Rectangle(0,0,196,WideArtwork.SafeHeight));
                 bool drawn=false;
                 if(!String.IsNullOrWhiteSpace(key.Image))try {using(var img=System.Drawing.Image.FromFile(key.Image)) {g.DrawImage(img,new Rectangle(50,25,96,96)); drawn=true;}}catch { }
                 if(!drawn && key.Kind=="application" && File.Exists(key.Target))try {using(var icon=Icon.ExtractAssociatedIcon(key.Target))if(icon!=null) { g.DrawIcon(icon,new Rectangle(58,30,80,80)); drawn=true; }}catch { }
@@ -81,7 +98,7 @@ namespace UlanziLite {
                     string mark=String.IsNullOrWhiteSpace(key.Target)?"+":(String.IsNullOrWhiteSpace(key.Label)?"?":System.Globalization.StringInfo.GetNextTextElement(key.Label));
                     g.DrawString(mark,font,Brushes.White,new RectangleF(0,17,196,105),new StringFormat {Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center});
                 }
-                using(var font=new Font("Malgun Gothic",17,FontStyle.Bold))g.DrawString(key.Label??"",font,Brushes.White,new RectangleF(10,125,176,65),new StringFormat {Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter});
+                using(var font=new Font(Typography.UiFontName,17,FontStyle.Bold))g.DrawString(key.Label??"",font,Brushes.White,new RectangleF(10,121,176,59),new StringFormat {Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter});
             } return bitmap;
         }
         public static byte[] Bundle(DeckPage page,byte[] wideImage=null) {
