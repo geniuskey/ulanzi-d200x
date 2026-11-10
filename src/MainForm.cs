@@ -24,6 +24,7 @@ namespace UlanziLite {
         readonly Stopwatch uptime=Stopwatch.StartNew();
         readonly SemaphoreSlim displayWriter=new SemaphoreSlim(1,1);
         PictureBox widePreview;bool updatingWide,updatingUsage;int usageRevision=-1;long usageMinute=-1;long nextWideAttempt;
+        bool updatingWebsiteIcons;long websiteEditAt;
         public MainForm(Configuration configuration) : this(configuration,false) { }
         public MainForm(Configuration configuration,bool preview) {
             previewMode=preview;config=configuration;wideState.HoldMilliseconds=config.OverlaySeconds*1000; Text="Ulanzi Lite · D200X"; BackColor=background; ForeColor=Color.FromArgb(232,238,245);
@@ -36,7 +37,7 @@ namespace UlanziLite {
             deck.Input+=(index,state)=>OnUI(()=>HandleInput(index,state));
             deck.Connected+=()=>OnUI(async()=>await SyncDeck());
             if(!preview)Shown+=(s,e)=>{deck.Start(); RefreshAudio();};
-            timer=new System.Windows.Forms.Timer {Interval=250}; timer.Tick+=async(s,e)=>{audio.TrackForeground();if(++ticks%4==0 && Visible){RefreshAudio();if(!wideState.WantsAudio(uptime.ElapsedMilliseconds))PreviewClock();}await PumpWideDisplay();await PumpUsageDisplay();}; if(!preview)timer.Start();
+            timer=new System.Windows.Forms.Timer {Interval=250}; timer.Tick+=async(s,e)=>{audio.TrackForeground();if(++ticks%4==0 && Visible){RefreshAudio();if(!wideState.WantsAudio(uptime.ElapsedMilliseconds))PreviewClock();}await PumpWebsiteIcons();await PumpWideDisplay();await PumpUsageDisplay();}; if(!preview)timer.Start();
             FormClosing+=(s,e)=>{if(!exiting && e.CloseReason==CloseReason.UserClosing){e.Cancel=true;Hide();}else{if(!FinishEditing()){e.Cancel=true;exiting=false;return;}timer.Stop();deck.Dispose();if(tray!=null){tray.Visible=false;tray.Dispose();}}};
         }
         void OnUI(Action action) {if(!IsDisposed && IsHandleCreated)try{BeginInvoke(action);}catch(InvalidOperationException){}}
@@ -179,6 +180,7 @@ namespace UlanziLite {
         }
         void EditorChanged() {
             if(loadingEditor)return;
+            websiteEditAt=uptime.ElapsedMilliseconds;
             var key=CurrentEditor();var saved=config.Pages[config.Page].Keys[selected];
             if(Configuration.Json.Serialize(key)==Configuration.Json.Serialize(saved))drafts.Remove(DraftId);else drafts[DraftId]=key;
             validation.Text="";UpdateEditorContext();RenderKey(selected);UpdateEditState();
@@ -281,6 +283,21 @@ namespace UlanziLite {
             finally {updatingUsage=false;}
         }
         void RefreshAudio() {audio.TrackForeground();for(int i=0;i<3;i++){var result=audio.Control(i,0,false);levels[i].Text=result.Available?result.ToString():"—";details[i].Text=result.Detail;tips.SetToolTip(details[i],result.Detail);}}
+        async Task PumpWebsiteIcons() {
+            if(updatingWebsiteIcons || uptime.ElapsedMilliseconds-websiteEditAt<700)return;
+            updatingWebsiteIcons=true;
+            try {
+                var saved=config.Pages[config.Page].Keys.Take(10).ToArray();
+                var visible=saved.Concat(drafts.Where(d=>d.Key/13==config.Page && d.Key%13<10).Select(d=>d.Value)).ToArray();
+                if(await WebsiteIconCache.Shared.RefreshAsync(visible)) {
+                    if(IsDisposed)return;
+                    PaintKeys();UpdateEditState();
+                    // SyncDeck always snapshots saved bindings, so a downloaded draft cannot be applied early.
+                    if(deck.IsConnected)await SyncDeck();
+                }
+            }catch(Exception ex){Program.Log("Website icon update failed: "+ex.Message);}
+            finally {updatingWebsiteIcons=false;}
+        }
         void Feedback(string text,bool error) {feedback.Text=text;feedback.ForeColor=error?Color.FromArgb(250,174,132):accent;if(error)Program.Log(text);}
         async Task SyncDeck() {
             if(syncing){pending=true;return;}if(!deck.IsConnected){Feedback("설정은 저장되었습니다. D200X 연결 시 적용됩니다.",false);return;}

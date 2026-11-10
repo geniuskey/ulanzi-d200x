@@ -65,6 +65,52 @@ namespace UlanziLite {
                 Check(entries.Count==3 && entries.ContainsKey("0_2") && entries.ContainsKey("1_2") && entries.ContainsKey("2_2") && !entries.ContainsKey("3_2"),"usage partial upload changes only bottom three buttons");
             }
         }
+        static void CheckWebsiteIcons() {
+            string folder=Path.Combine(Path.GetTempPath(),"UlanziLite-icons-"+Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            try {
+                byte[] png;
+                using(var bitmap=new System.Drawing.Bitmap(32,32)) {
+                    using(var g=System.Drawing.Graphics.FromImage(bitmap))g.Clear(System.Drawing.Color.Lime);
+                    using(var stream=new MemoryStream()){bitmap.Save(stream,System.Drawing.Imaging.ImageFormat.Png);png=stream.ToArray();}
+                }
+                var requests=new System.Collections.Generic.List<string>();
+                var cache=new WebsiteIconCache(folder,uri=>{
+                    requests.Add(uri.AbsoluteUri);
+                    if(uri.AbsolutePath=="/")return new WebsiteIconCache.Resource {Bytes=Encoding.UTF8.GetBytes("<base href='/assets/'><link href='mark.png?v=1&amp;s=2' rel='shortcut icon'>"),Address=new Uri("https://cdn.example.test/home/")};
+                    return new WebsiteIconCache.Resource {Bytes=png,Address=uri};
+                });
+                var key=new KeyBinding {Label="Website",Target="https://example.test/private?token=secret#section"};
+                Check(cache.RefreshAsync(new[]{key,key}).GetAwaiter().GetResult(),"website icon downloads once for duplicate origins");
+                Check(requests.SequenceEqual(new[]{"https://example.test/","https://cdn.example.test/assets/mark.png?v=1&s=2"}),"website icon follows redirected page base and relative link without sending shortcut path or query");
+                using(var icon=cache.GetIcon(key))Check(icon!=null && icon.Width==96,"website icon is normalized to native artwork size");
+                using(var artwork=Artwork.Render(key,cache)) {
+                    Check(artwork.GetPixel(98,73).ToArgb()==System.Drawing.Color.Lime.ToArgb(),"website artwork displays downloaded site icon");
+                    CheckSafeEdge(artwork,"website icon preserves bottom safe edge");
+                }
+                Check(!cache.RefreshAsync(new[]{key}).GetAwaiter().GetResult() && requests.Count==2,"cached website icon avoids repeat requests");
+                var offline=new WebsiteIconCache(folder,uri=>{throw new IOException("offline");});
+                Check(offline.RefreshAsync(new[]{key}).GetAwaiter().GetResult(),"website icons reload from disk without network");
+                key.Image=Path.Combine(folder,"custom.png");
+                using(var custom=new System.Drawing.Bitmap(32,32)){using(var g=System.Drawing.Graphics.FromImage(custom))g.Clear(System.Drawing.Color.Red);custom.Save(key.Image);}
+                using(var artwork=Artwork.Render(key,cache))Check(artwork.GetPixel(98,73).ToArgb()==System.Drawing.Color.Red.ToArgb(),"custom image takes priority over website icon");
+                Check(!cache.RefreshAsync(new[]{key,new KeyBinding {Target="file:///C:/test"},new KeyBinding()}).GetAwaiter().GetResult() && requests.Count==2,"custom images, invalid URLs and empty buttons do not request icons");
+                int calls=0;
+                var fallback=new WebsiteIconCache(Path.Combine(folder,"fallback"),uri=>{
+                    calls++;
+                    if(uri.AbsolutePath!="/favicon.ico")throw new IOException("page unavailable");
+                    using(var stream=new MemoryStream()){System.Drawing.SystemIcons.Application.Save(stream);return new WebsiteIconCache.Resource {Bytes=stream.ToArray(),Address=uri};}
+                });
+                key.Image="";
+                Check(fallback.RefreshAsync(new[]{key}).GetAwaiter().GetResult() && calls==2,"favicon.ico works when homepage is unavailable");
+                calls=0;
+                var failed=new WebsiteIconCache(Path.Combine(folder,"failed"),uri=>{calls++;return new WebsiteIconCache.Resource {Bytes=Encoding.UTF8.GetBytes("not an image"),Address=uri};});
+                Check(!failed.RefreshAsync(new[]{key}).GetAwaiter().GetResult() && failed.GetIcon(key)==null,"invalid downloaded images fall back without throwing");
+                int previous=calls;
+                Check(!failed.RefreshAsync(new[]{key}).GetAwaiter().GetResult() && calls==previous,"failed icon requests wait before retrying");
+                using(var artwork=Artwork.Render(key,failed))Check(artwork.Width==196,"website artwork still renders when icon download fails");
+            }finally {Directory.Delete(folder,true);}
+        }
         static System.Collections.Generic.IEnumerable<Control> Descendants(Control parent) {
             foreach(Control control in parent.Controls){yield return control;foreach(var child in Descendants(control))yield return child;}
         }
@@ -181,7 +227,7 @@ namespace UlanziLite {
                     Check(entries.Count==1 && entries.ContainsKey("3_2"),"partial upload must leave all other keys untouched");
                 }
                 var partialPacket=Protocol.Packet(13,partial.Take(1016).ToArray(),partial.Length);Check(partialPacket[2]==0 && partialPacket[3]==13 && BitConverter.ToInt32(partialPacket,4)==partial.Length,"partial command framing");
-                CheckConfiguration();CheckUsageMeters();CheckEditor();
+                CheckConfiguration();CheckUsageMeters();CheckWebsiteIcons();CheckEditor();
                 File.WriteAllText(report,results.ToString()+"PASS: "+checks+" checks"+Environment.NewLine,Encoding.UTF8);return 0;
             }catch(Exception ex){File.WriteAllText(report,results.ToString()+"FAIL: "+ex,Encoding.UTF8);return 1;}
         }

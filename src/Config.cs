@@ -81,7 +81,7 @@ namespace UlanziLite {
         }
     }
     public static class Artwork {
-        public static Bitmap Render(KeyBinding key) {
+        public static Bitmap Render(KeyBinding key,WebsiteIconCache websiteIcons=null) {
             var bitmap=new Bitmap(196,196,PixelFormat.Format24bppRgb);
             using(var g=Graphics.FromImage(bitmap)) {
                 g.SmoothingMode=SmoothingMode.AntiAlias; g.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
@@ -93,6 +93,7 @@ namespace UlanziLite {
                 g.SetClip(new Rectangle(0,0,196,WideArtwork.SafeHeight));
                 bool drawn=false;
                 if(!String.IsNullOrWhiteSpace(key.Image))try {using(var img=System.Drawing.Image.FromFile(key.Image)) {g.DrawImage(img,new Rectangle(50,25,96,96)); drawn=true;}}catch { }
+                if(!drawn && key.Kind=="website")using(var icon=(websiteIcons??WebsiteIconCache.Shared).GetIcon(key))if(icon!=null){g.DrawImage(icon,new Rectangle(50,25,96,96));drawn=true;}
                 if(!drawn && key.Kind=="application" && File.Exists(key.Target))try {using(var icon=Icon.ExtractAssociatedIcon(key.Target))if(icon!=null) { g.DrawIcon(icon,new Rectangle(58,30,80,80)); drawn=true; }}catch { }
                 if(!drawn)using(var font=new Font("Segoe UI",46,FontStyle.Bold)) {
                     string mark=String.IsNullOrWhiteSpace(key.Target)?"+":(String.IsNullOrWhiteSpace(key.Label)?"?":System.Globalization.StringInfo.GetNextTextElement(key.Label));
