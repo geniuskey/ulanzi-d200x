@@ -1,4 +1,4 @@
-# 검증과 배포
+﻿# 검증과 배포
 
 ## 자동 검증
 
@@ -11,7 +11,7 @@
 
 | 명령 | 결과 파일 | 범위 |
 | --- | --- | --- |
-| `--self-test` | `test-results.txt`, `audio-preview.png`, `clock-preview.png` | HID 프레이밍·파싱, URL/설정 검증, ZIP manifest·패킷 경계, 이미지 크기, 볼륨 표시 상태 전이, 파일 교체·백업, 실제 편집 UI의 초안 보존·저장·초기화 |
+| `--self-test` | `test-results.txt`, `audio-preview.png`, `clock-preview.png`, `layout-*.png` | HID 프레이밍·파싱, URL/설정 검증, ZIP manifest·패킷 경계, 이미지 크기, 볼륨 표시 상태 전이, 파일 교체·백업, 실제 편집 UI의 초안 보존·미리보기·저장·취소·오류 안내·초기화, 기본/1120/1500 너비의 컨트롤 겹침·잘림 |
 | `--render` | `preview.png` | 장치 없이 기본 구성으로 UI 렌더링 |
 | `--audio-test` | `audio-test-results.txt` | 기본 입력/출력 읽기, 테스트 프로세스의 무음 세션 볼륨·음소거 제어와 복원 |
 | `--usage-test` | `usage-test-results.txt` | 실제 CLI 로그인으로 사용량 조회. 계정·네트워크가 필요한 선택 진단 |

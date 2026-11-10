@@ -65,28 +65,61 @@ namespace UlanziLite {
                 Check(entries.Count==3 && entries.ContainsKey("0_2") && entries.ContainsKey("1_2") && entries.ContainsKey("2_2") && !entries.ContainsKey("3_2"),"usage partial upload changes only bottom three buttons");
             }
         }
+        static System.Collections.Generic.IEnumerable<Control> Descendants(Control parent) {
+            foreach(Control control in parent.Controls){yield return control;foreach(var child in Descendants(control))yield return child;}
+        }
+        static void CheckEditorLayout(Form form,string name) {
+            foreach(var input in Descendants(form).Where(c=>c is Button || c is TextBox || c is ComboBox || c is NumericUpDown)) {
+                if(!input.Parent.ClientRectangle.Contains(input.Bounds))throw new Exception(name+": clipped "+input.AccessibleName);
+                foreach(Control other in input.Parent.Controls)
+                    if(other!=input && (other is Button || other is TextBox || other is ComboBox || other is NumericUpDown) && input.Bounds.IntersectsWith(other.Bounds))throw new Exception(name+": overlapping "+input.AccessibleName);
+            }
+            Check(true,name);
+        }
         static void CheckEditor() {
             Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);
             var config=Configuration.Defaults();
             using(var form=new MainForm(config,true)) {
                 form.Show();Application.DoEvents();
-                var name=form.Controls.OfType<TextBox>().Single(c=>c.AccessibleName=="표시 이름");
-                var pages=form.Controls.OfType<ComboBox>().Single(c=>c.AccessibleName=="페이지 선택");
-                var buttons=form.Controls.OfType<Button>().ToList();
+                var name=Descendants(form).OfType<TextBox>().Single(c=>c.AccessibleName=="표시 이름");
+                var pages=Descendants(form).OfType<ComboBox>().Single(c=>c.AccessibleName=="페이지 선택");
+                var buttons=Descendants(form).OfType<Button>().ToList();
                 var first=buttons.Single(c=>c.AccessibleName.StartsWith("버튼 1 ·"));var second=buttons.Single(c=>c.AccessibleName.StartsWith("버튼 2 ·"));
+                CheckEditorLayout(form,"default window keeps editor and audio controls within their containers");
+                foreach(int width in new[]{1120,1500}) {
+                    form.ClientSize=new System.Drawing.Size(width,860);Application.DoEvents();
+                    CheckEditorLayout(form,"window width "+width+" keeps interactive controls separate and visible");
+                    using(var bitmap=new System.Drawing.Bitmap(form.Width,form.Height)){form.DrawToBitmap(bitmap,new System.Drawing.Rectangle(0,0,form.Width,form.Height));bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layout-"+width+".png"));}
+                }
+                form.ClientSize=new System.Drawing.Size(1180,860);Application.DoEvents();
+                var kind=Descendants(form).OfType<ComboBox>().Single(c=>c.AccessibleName=="버튼 동작");
+                kind.SelectedIndex=0;
+                Check(!buttons.Single(c=>c.AccessibleName=="파일 찾기").Enabled && !buttons.Single(c=>c.AccessibleName=="폴더 찾기").Enabled,"website action disables irrelevant file browsing");
+                kind.SelectedIndex=1;
+                Check(buttons.Single(c=>c.AccessibleName=="파일 찾기").Enabled,"application action enables file browsing");
+                kind.SelectedIndex=config.Pages[0].Keys[0].Kind=="application"?1:0;
                 string original=config.Pages[0].Keys[0].Label;
+                name.Text="편집 보존";
+                var preview=Descendants(form).OfType<PictureBox>().Single(c=>c.AccessibleName=="편집 중인 버튼 미리보기");
+                Check(first.Text=="●" && first.AccessibleName.Contains("편집 보존") && preview.Image!=null,"draft updates button artwork, accessible name and preview");
+                buttons.Single(c=>c.AccessibleName=="편집 취소").PerformClick();
+                Check(name.Text==original && first.Text=="" && !form.Text.Contains("편집 중"),"cancel restores selected draft and clears its marker");
                 name.Text="편집 보존";second.PerformClick();first.PerformClick();
                 Check(name.Text=="편집 보존" && config.Pages[0].Keys[0].Label==original,"switching keys preserves draft without changing saved action");
                 pages.SelectedIndex=1;pages.SelectedIndex=0;
                 Check(name.Text=="편집 보존","switching pages preserves draft");
                 buttons.Single(c=>c.AccessibleName=="저장 · 장치에 적용").PerformClick();
                 Check(config.Pages[0].Keys[0].Label=="편집 보존" && !form.Text.Contains("편집 중"),"save commits selected draft and clears dirty state");
-                var target=form.Controls.OfType<TextBox>().Single(c=>c.AccessibleName=="주소 또는 실행 경로");
-                form.Controls.OfType<ComboBox>().Single(c=>c.AccessibleName=="버튼 동작").SelectedIndex=0;
+                var target=Descendants(form).OfType<TextBox>().Single(c=>c.AccessibleName=="주소 또는 실행 경로");
+                Descendants(form).OfType<ComboBox>().Single(c=>c.AccessibleName=="버튼 동작").SelectedIndex=0;
                 target.Text="javascript:alert(1)";
                 string savedTarget=config.Pages[0].Keys[0].Target;
                 buttons.Single(c=>c.AccessibleName=="저장 · 장치에 적용").PerformClick();
                 Check(config.Pages[0].Keys[0].Target==savedTarget && form.Text.Contains("편집 중"),"invalid save preserves saved action and editable draft");
+                var validation=Descendants(form).OfType<Label>().Single(c=>c.AccessibleName=="편집 입력 오류");
+                Check(validation.Text.Contains("https://") && form.ActiveControl==target,"invalid URL shows inline guidance and focuses its field");
+                buttons.Single(c=>c.AccessibleName=="편집 취소").PerformClick();
+                Check(validation.Text=="" && target.Text==savedTarget,"cancel clears validation and restores saved input");
                 buttons.Single(c=>c.AccessibleName=="버튼 초기화").PerformClick();
                 Check(name.Text=="빈 버튼" && config.Pages[0].Keys[0].Label=="편집 보존","reset remains a draft until saved");
             }
