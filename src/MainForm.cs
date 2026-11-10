@@ -23,6 +23,7 @@ namespace UlanziLite {
         readonly WideScreenState wideState=new WideScreenState();
         readonly Stopwatch uptime=Stopwatch.StartNew();
         readonly SemaphoreSlim displayWriter=new SemaphoreSlim(1,1);
+        readonly Artwork.DisplayImages displayImages=new Artwork.DisplayImages();
         PictureBox widePreview;bool updatingWide,updatingUsage;int usageRevision=-1;long usageMinute=-1;long nextWideAttempt;
         bool updatingWebsiteIcons;long websiteEditAt;
         public MainForm(Configuration configuration) : this(configuration,false) { }
@@ -258,8 +259,8 @@ namespace UlanziLite {
                     if(!wideState.WantsAudio(uptime.ElapsedMilliseconds))return;
                     SetWidePreview(WideArtwork.Audio(states,active,appName));
                 }else {png=await Task.Run(()=>{using(var clock=WideArtwork.Clock(clockTime))return WideArtwork.Encode(clock);});SetWidePreview(WideArtwork.Clock(clockTime));}
-                byte[] bundle=await Task.Run(()=>Artwork.WideBundle(png));
-                await deck.Send(13,bundle,true);
+                byte[] bundle=await Task.Run(()=>displayImages.Wide(png));
+                await deck.Send(1,bundle,true);
                 await deck.Send(6,WindowMode(2),false);
                 bool wasAudio=wideState.SentAudio;wideState.MarkSent(showAudio,version,clockSecond);
                 if(showAudio || wasAudio)Program.Log("Wide display: "+(showAudio?"audio":"clock image")+" ("+bundle.Length+" bytes)");
@@ -276,7 +277,7 @@ namespace UlanziLite {
                 for(int i=10;i<13;i++){var old=keys[i].BackgroundImage;keys[i].BackgroundImage=UsageMeters.Render(i-10);if(old!=null)old.Dispose();}
                 if(deck.IsConnected){
                     await displayWriter.WaitAsync();
-                    try {var bundle=await Task.Run(()=>Artwork.UsageBundle());await deck.Send(13,bundle,true);}
+                    try {var bundle=await Task.Run(()=>displayImages.Usage());await deck.Send(1,bundle,true);await deck.Send(6,WindowMode(2),false);Program.Log("Usage display: full page ("+bundle.Length+" bytes)");}
                     finally {displayWriter.Release();}
                 }
                 usageRevision=revision;usageMinute=minute;
@@ -310,7 +311,7 @@ namespace UlanziLite {
                     // Snapshot on the UI thread; rendering and ZIP compression stay off it.
                     var snapshot=Configuration.Json.Deserialize<DeckPage>(Configuration.Json.Serialize(config.Pages[config.Page]));
                     DateTime initialClock=DateTime.Now;
-                    byte[] bundle=await Task.Run(()=>{using(var clock=WideArtwork.Clock(initialClock))return Artwork.Bundle(snapshot,WideArtwork.Encode(clock));});
+                    byte[] bundle=await Task.Run(()=>{using(var clock=WideArtwork.Clock(initialClock))return displayImages.Reset(snapshot,WideArtwork.Encode(clock));});
                     await deck.Send(11,Encoding.UTF8.GetBytes("{\"Align\":\"bottom\",\"Color\":16777215,\"FontName\":\"Roboto\",\"ShowTitle\":false,\"Size\":10,\"Weight\":80}"),false);
                     await deck.Send(1,bundle,true);
                     await deck.Send(6,WindowMode(2),false);wideState.Reset();wideState.MarkSent(false,wideState.Version,initialClock.Ticks/TimeSpan.TicksPerSecond);PreviewClock();

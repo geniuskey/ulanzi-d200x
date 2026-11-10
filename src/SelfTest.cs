@@ -60,10 +60,38 @@ namespace UlanziLite {
                 using(var meter=UsageMeters.Render(i,reading,now))CheckSafeEdge(meter,"usage meter reserves bottom five percent");
                 using(var unknown=UsageMeters.Render(i,null,now))Check(unknown.Width==196 && unknown.Height==196,"unknown usage meter renders at native button size");
             }
-            using(var zip=new ZipArchive(new MemoryStream(Artwork.UsageBundle()),ZipArchiveMode.Read))using(var reader=new StreamReader(zip.GetEntry("manifest.json").Open())) {
+        }
+        static System.Collections.Generic.Dictionary<string,byte[]> DisplayAssets(byte[] bundle) {
+            for(int p=1016;p<bundle.Length;p+=1024)Check(bundle[p]!=0 && bundle[p]!=0x7c,"complete display packet boundary");
+            var assets=new System.Collections.Generic.Dictionary<string,byte[]>();
+            using(var zip=new ZipArchive(new MemoryStream(bundle),ZipArchiveMode.Read))using(var reader=new StreamReader(zip.GetEntry("manifest.json").Open())) {
                 var entries=new JavaScriptSerializer().DeserializeObject(reader.ReadToEnd()) as System.Collections.Generic.Dictionary<string,object>;
-                Check(entries.Count==3 && entries.ContainsKey("0_2") && entries.ContainsKey("1_2") && entries.ContainsKey("2_2") && !entries.ContainsKey("3_2"),"usage partial upload changes only bottom three buttons");
+                Check(entries.Count==14,"every refresh retains all thirteen buttons and the wide display");
+                foreach(var entry in entries) {
+                    var view=(object[])LocalUsageReader.Field(entry.Value,"ViewParam");
+                    string name=(string)LocalUsageReader.Field(view[0],"Icon");
+                    var file=zip.GetEntry(name);Check(file!=null,"every displayed image is included in the current ZIP");
+                    using(var input=file.Open())using(var output=new MemoryStream()){input.CopyTo(output);assets[entry.Key]=output.ToArray();}
+                }
             }
+            return assets;
+        }
+        static void CheckDisplayRefresh(byte[] widePng) {
+            var images=new Artwork.DisplayImages();var page=Configuration.Defaults().Pages[0];
+            var initial=DisplayAssets(images.Reset(page,widePng));
+            // Cross both one-minute repaint and two-minute quota-poll boundaries.
+            foreach(int seconds in new[]{1,59,60,61,119,120,121,180}) {
+                byte[] clock;using(var bitmap=WideArtwork.Clock(new DateTime(2026,1,1).AddSeconds(seconds)))clock=WideArtwork.Encode(bitmap);
+                var updated=DisplayAssets(images.Wide(clock));
+                Check(updated["3_2"].SequenceEqual(clock),"clock refresh includes its new image");
+                for(int i=0;i<13;i++){string key=(i%5)+"_"+(i/5);Check(updated[key].SequenceEqual(initial[key]),"clock refresh preserves button image "+i);}
+                updated=DisplayAssets(images.Usage());
+                Check(updated["3_2"].SequenceEqual(clock),"quota refresh preserves the latest clock");
+                for(int i=0;i<10;i++){string key=(i%5)+"_"+(i/5);Check(updated[key].SequenceEqual(initial[key]),"quota refresh preserves saved application image "+i);}
+            }
+            page.Keys[0].Label="Changed page";
+            var reset=DisplayAssets(images.Reset(page,widePng));
+            Check(!reset["0_0"].SequenceEqual(initial["0_0"]),"page sync replaces cached application images");
         }
         static void CheckWebsiteIcons() {
             string folder=Path.Combine(Path.GetTempPath(),"UlanziLite-icons-"+Guid.NewGuid().ToString("N"));
@@ -220,13 +248,7 @@ namespace UlanziLite {
                     Check(wide.Width==392 && wide.Height==196,"wide display aspect ratio");wide.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"audio-preview.png"));widePng=WideArtwork.Encode(wide);
                 }
                 using(var native=new System.Drawing.Bitmap(new MemoryStream(widePng))){Check(native.Width==196 && native.Height==196,"wide image squeezed for firmware");CheckSafeEdge(native,"firmware audio image preserves safe edge");}
-                var partial=Artwork.WideBundle(widePng);
-                for(int p=1016;p<partial.Length;p+=1024)Check(partial[p]!=0 && partial[p]!=0x7c,"partial packet boundaries");
-                using(var zip=new ZipArchive(new MemoryStream(partial),ZipArchiveMode.Read))using(var reader=new StreamReader(zip.GetEntry("manifest.json").Open())) {
-                    var entries=new JavaScriptSerializer().DeserializeObject(reader.ReadToEnd()) as System.Collections.Generic.Dictionary<string,object>;
-                    Check(entries.Count==1 && entries.ContainsKey("3_2"),"partial upload must leave all other keys untouched");
-                }
-                var partialPacket=Protocol.Packet(13,partial.Take(1016).ToArray(),partial.Length);Check(partialPacket[2]==0 && partialPacket[3]==13 && BitConverter.ToInt32(partialPacket,4)==partial.Length,"partial command framing");
+                CheckDisplayRefresh(widePng);
                 CheckConfiguration();CheckUsageMeters();CheckWebsiteIcons();CheckEditor();
                 File.WriteAllText(report,results.ToString()+"PASS: "+checks+" checks"+Environment.NewLine,Encoding.UTF8);return 0;
             }catch(Exception ex){File.WriteAllText(report,results.ToString()+"FAIL: "+ex,Encoding.UTF8);return 1;}

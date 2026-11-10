@@ -102,17 +102,30 @@ namespace UlanziLite {
                 using(var font=new Font(Typography.UiFontName,17,FontStyle.Bold))g.DrawString(key.Label??"",font,Brushes.White,new RectangleF(10,121,176,59),new StringFormat {Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter});
             } return bitmap;
         }
-        public static byte[] Bundle(DeckPage page,byte[] wideImage=null) {
+        static Dictionary<int,byte[]> PageIcons(DeckPage page,byte[] wideImage) {
             var icons=new Dictionary<int,byte[]>();
             for(int i=0;i<14;i++) {if(i==13 && wideImage!=null){icons[i]=wideImage;continue;}using(var image=i==13?new Bitmap(196,196):i>=10?UsageMeters.Render(i-10):Render(page.Keys[i]))using(var ms=new MemoryStream()) {image.Save(ms,ImageFormat.Png);icons[i]=ms.ToArray();}}
-            return BundleForIcons(icons);
+            return icons;
         }
-        public static byte[] UsageBundle() {
-            var icons=new Dictionary<int,byte[]>();
-            for(int i=0;i<3;i++)using(var image=UsageMeters.Render(i))using(var ms=new MemoryStream()){image.Save(ms,ImageFormat.Png);icons[i+10]=ms.ToArray();}
-            return BundleForIcons(icons);
+        public static byte[] Bundle(DeckPage page,byte[] wideImage=null) {return BundleForIcons(PageIcons(page,wideImage));}
+        // Every upload must be self-contained. Partial ZIPs can invalidate images
+        // referenced by the previous manifest on the device. Cache unchanged PNGs
+        // so the ticking clock does not redraw applications or reload their icons.
+        public sealed class DisplayImages {
+            Dictionary<int,byte[]> icons;
+            public byte[] Reset(DeckPage page,byte[] wideImage) {
+                icons=PageIcons(page,wideImage);return BundleForIcons(icons);
+            }
+            public byte[] Usage() {
+                if(icons==null)throw new InvalidOperationException("Display page has not been initialized.");
+                for(int i=0;i<3;i++)using(var image=UsageMeters.Render(i))using(var ms=new MemoryStream()){image.Save(ms,ImageFormat.Png);icons[i+10]=ms.ToArray();}
+                return BundleForIcons(icons);
+            }
+            public byte[] Wide(byte[] png) {
+                if(icons==null)throw new InvalidOperationException("Display page has not been initialized.");
+                icons[13]=png;return BundleForIcons(icons);
+            }
         }
-        public static byte[] WideBundle(byte[] png) {return BundleForIcons(new Dictionary<int,byte[]> {{13,png}});}
         static byte[] BundleForIcons(Dictionary<int,byte[]> icons) {
             var files=new Dictionary<string,byte[]>(); var manifest=new Dictionary<string,object>();
             using(var sha=SHA256.Create())foreach(var icon in icons) {
