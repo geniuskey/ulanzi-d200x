@@ -6,8 +6,8 @@ using System.Linq;
 [assembly: AssemblyTitle("Ulanzi Lite")]
 [assembly: AssemblyDescription("Lightweight Windows controller for Ulanzi D200X")]
 [assembly: AssemblyProduct("Ulanzi Lite for D200X")]
-[assembly: AssemblyVersion("0.2.0.0")]
-[assembly: AssemblyFileVersion("0.2.0.0")]
+[assembly: AssemblyVersion("0.3.0.0")]
+[assembly: AssemblyFileVersion("0.3.0.0")]
 
 namespace UlanziLite {
     static class Typography {

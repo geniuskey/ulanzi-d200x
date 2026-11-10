@@ -39,6 +39,32 @@ namespace UlanziLite {
                 Check(Configuration.Parse(File.ReadAllText(path+".bak")).Pages[0].Keys[0].Label=="처음" && !File.Exists(path+".tmp"),"preserve previous configuration and clean temporary file");
             }finally{Directory.Delete(folder,true);}
         }
+        static void CheckUsageMeters() {
+            DateTime now=DateTime.UtcNow;
+            string timestamp=now.ToString("o");
+            var reading=LocalUsageReader.ParseCodex("{\"type\":\"event_msg\",\"timestamp\":\""+timestamp+"\",\"payload\":{\"type\":\"token_count\",\"rate_limits\":{\"limit_id\":\"codex\",\"primary\":{\"used_percent\":43,\"window_minutes\":10080},\"secondary\":{\"used_percent\":5,\"window_minutes\":300}}}}");
+            Check(reading.SessionUsed==5 && reading.WeeklyUsed==43,"Codex maps quotas by duration rather than array order");
+            Check(LocalUsageReader.ParseCodex("{\"type\":\"event_msg\",\"payload\":{\"type\":\"token_count\",\"rate_limits\":null}}")==null,"Codex null quota is unavailable rather than zero");
+            reading=LocalUsageReader.ParseClaude("{\"five_hour\":{\"utilization\":0},\"seven_day\":{\"utilization\":99}}",now);
+            Check(reading.SessionUsed==0 && reading.WeeklyUsed==99,"Claude zero utilization is a known measurement");
+            Check(LocalUsageReader.ParseClaude("{}",now).SessionUsed==null,"missing Claude window remains unknown");
+            reading=LocalUsageReader.ParseGemini("{\"buckets\":[{\"modelId\":\"gemini-pro\",\"remainingFraction\":0.75},{\"modelId\":\"gemini-pro-preview\",\"remainingFraction\":0.5},{\"modelId\":\"gemini-flash\",\"remainingFraction\":1}]}",now);
+            Check(reading.SessionUsed==50 && reading.WeeklyUsed==0,"Gemini converts remaining quota and uses most constrained model in each family");
+            Check(LocalUsageReader.ParseGemini("{}",now).SessionUsed==null,"missing Gemini buckets remain unknown");
+            Check(Rejects(()=>new UsageReading {Provider="claude",SessionUsed=101,ObservedAt=timestamp}.Validate()),"reject out-of-range usage");
+            Check(Rejects(()=>new UsageReading {Provider="claude",SessionUsed=Double.NaN,ObservedAt=timestamp}.Validate()),"reject non-finite usage");
+            Check(!UsageReading.WindowActive(now.AddMinutes(-1).ToString("o"),now) && UsageReading.WindowActive(now.AddMinutes(1).ToString("o"),now),"expired quota windows hide cached readings instead of inventing a reset value");
+            Check(reading.IsFresh(now) && !reading.IsFresh(now.AddMinutes(16)),"stale snapshots are identified by observation time");
+            for(int i=0;i<3;i++) {
+                UsageMeters.Binding(i).Validate();
+                using(var meter=UsageMeters.Render(i,reading,now))CheckSafeEdge(meter,"usage meter reserves bottom five percent");
+                using(var unknown=UsageMeters.Render(i,null,now))Check(unknown.Width==196 && unknown.Height==196,"unknown usage meter renders at native button size");
+            }
+            using(var zip=new ZipArchive(new MemoryStream(Artwork.UsageBundle()),ZipArchiveMode.Read))using(var reader=new StreamReader(zip.GetEntry("manifest.json").Open())) {
+                var entries=new JavaScriptSerializer().DeserializeObject(reader.ReadToEnd()) as System.Collections.Generic.Dictionary<string,object>;
+                Check(entries.Count==3 && entries.ContainsKey("0_2") && entries.ContainsKey("1_2") && entries.ContainsKey("2_2") && !entries.ContainsKey("3_2"),"usage partial upload changes only bottom three buttons");
+            }
+        }
         static void CheckEditor() {
             Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);
             var config=Configuration.Defaults();
@@ -122,7 +148,7 @@ namespace UlanziLite {
                     Check(entries.Count==1 && entries.ContainsKey("3_2"),"partial upload must leave all other keys untouched");
                 }
                 var partialPacket=Protocol.Packet(13,partial.Take(1016).ToArray(),partial.Length);Check(partialPacket[2]==0 && partialPacket[3]==13 && BitConverter.ToInt32(partialPacket,4)==partial.Length,"partial command framing");
-                CheckConfiguration();CheckEditor();
+                CheckConfiguration();CheckUsageMeters();CheckEditor();
                 File.WriteAllText(report,results.ToString()+"PASS: "+checks+" checks"+Environment.NewLine,Encoding.UTF8);return 0;
             }catch(Exception ex){File.WriteAllText(report,results.ToString()+"FAIL: "+ex,Encoding.UTF8);return 1;}
         }

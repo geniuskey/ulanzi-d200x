@@ -11,6 +11,7 @@ using System.Windows.Forms;
 
 namespace UlanziLite {
     public sealed class MainForm : Form {
+        readonly LocalUsageReader usageReader=new LocalUsageReader();
         readonly Deck deck=new Deck(); readonly AudioController audio=new AudioController();
         readonly bool previewMode; Configuration config; readonly Button[] keys=new Button[13]; readonly Label[] levels=new Label[3]; readonly Label[] details=new Label[3];
         readonly Color background=Color.FromArgb(15,19,27),surface=Color.FromArgb(24,30,41),accent=Color.FromArgb(115,221,185);
@@ -22,7 +23,7 @@ namespace UlanziLite {
         readonly WideScreenState wideState=new WideScreenState();
         readonly Stopwatch uptime=Stopwatch.StartNew();
         readonly SemaphoreSlim displayWriter=new SemaphoreSlim(1,1);
-        PictureBox widePreview;bool updatingWide;long nextWideAttempt;
+        PictureBox widePreview;bool updatingWide,updatingUsage;int usageRevision=-1;long usageMinute=-1;long nextWideAttempt;
         public MainForm(Configuration configuration) : this(configuration,false) { }
         public MainForm(Configuration configuration,bool preview) {
             previewMode=preview;config=configuration;wideState.HoldMilliseconds=config.OverlaySeconds*1000; Text="Ulanzi Lite · D200X"; BackColor=background; ForeColor=Color.FromArgb(232,238,245);
@@ -35,7 +36,7 @@ namespace UlanziLite {
             deck.Input+=(index,state)=>OnUI(()=>HandleInput(index,state));
             deck.Connected+=()=>OnUI(async()=>await SyncDeck());
             if(!preview)Shown+=(s,e)=>{deck.Start(); RefreshAudio();};
-            timer=new System.Windows.Forms.Timer {Interval=250}; timer.Tick+=async(s,e)=>{audio.TrackForeground();if(++ticks%4==0 && Visible){RefreshAudio();if(!wideState.WantsAudio(uptime.ElapsedMilliseconds))PreviewClock();}await PumpWideDisplay();}; if(!preview)timer.Start();
+            timer=new System.Windows.Forms.Timer {Interval=250}; timer.Tick+=async(s,e)=>{audio.TrackForeground();if(++ticks%4==0 && Visible){RefreshAudio();if(!wideState.WantsAudio(uptime.ElapsedMilliseconds))PreviewClock();}await PumpWideDisplay();await PumpUsageDisplay();}; if(!preview)timer.Start();
             FormClosing+=(s,e)=>{if(!exiting && e.CloseReason==CloseReason.UserClosing){e.Cancel=true;Hide();}else{if(!FinishEditing()){e.Cancel=true;exiting=false;return;}timer.Stop();deck.Dispose();if(tray!=null){tray.Visible=false;tray.Dispose();}}};
         }
         void OnUI(Action action) {if(!IsDisposed && IsHandleCreated)try{BeginInvoke(action);}catch(InvalidOperationException){}}
@@ -61,15 +62,15 @@ namespace UlanziLite {
             TextAt(this,"버튼은 바로 실행하고, 소리는 손끝에서.",32,73,650,28,11,Color.FromArgb(156,173,193));
             status=TextAt(this,"D200X 연결 확인 중…",755,28,340,25,10,accent);
             ButtonAt(this,"설정 폴더",817,65,128,29,()=>{try{Process.Start(new ProcessStartInfo(AppDomain.CurrentDomain.BaseDirectory){UseShellExecute=true});}catch(Exception ex){Feedback(ex.Message,true);}});
-            ButtonAt(this,"사용 안내",959,65,128,29,()=>MessageBox.Show(this,"Ulanzi Lite 0.2.0 · D200X\n\n1. 버튼을 선택하고 동작을 편집합니다.\n2. Ctrl+S 또는 저장 버튼으로 적용합니다.\n\n편집 내용은 버튼·페이지를 이동해도 유지됩니다.\n저장 전에는 장치 버튼에 반영되지 않습니다.\nEsc: 선택 버튼의 편집 취소\n창 닫기: 트레이로 숨기기\n트레이 우클릭 → 종료: 완전히 종료\n\n설정·백업·로그는 실행 파일 옆에 저장됩니다.\n자세한 안내는 함께 제공된 README.md를 확인하세요.","사용 안내",MessageBoxButtons.OK,MessageBoxIcon.Information));
+            ButtonAt(this,"사용 안내",959,65,128,29,()=>MessageBox.Show(this,"Ulanzi Lite 0.3.0 · D200X\n\n1. 버튼을 선택하고 동작을 편집합니다.\n2. Ctrl+S 또는 저장 버튼으로 적용합니다.\n\n위 10개는 편집, 아래 3개는 AI 구독 사용량입니다.\n하단 버튼을 누르면 사용량 페이지를 엽니다.\n\n편집 내용은 버튼·페이지를 이동해도 유지됩니다.\n저장 전에는 장치 버튼에 반영되지 않습니다.\nEsc: 선택 버튼의 편집 취소\n창 닫기: 트레이로 숨기기\n트레이 우클릭 → 종료: 완전히 종료\n\n설정·백업·로그는 실행 파일 옆에 저장됩니다.\n자세한 안내는 함께 제공된 README.md를 확인하세요.","사용 안내",MessageBoxButtons.OK,MessageBoxIcon.Information));
             var divider=new Panel {Location=new Point(790,120),Size=new Size(1,632),BackColor=Color.FromArgb(44,55,71)};Controls.Add(divider);
             pages=SelectAt(32,120,235); pages.AccessibleName="페이지 선택"; foreach(var page in config.Pages)pages.Items.Add(page.Name); pages.SelectedIndex=config.Page;
             pages.SelectedIndexChanged+=async(s,e)=>{config.Page=pages.SelectedIndex;PaintKeys();LoadKey();try{SaveConfiguration();await SyncDeck();}catch(Exception ex){Feedback(ex.Message,true);}};
             ButtonAt(this,"‹",280,119,40,31,()=>ChangePage(-1)); ButtonAt(this,"›",326,119,40,31,()=>ChangePage(1));
-            TextAt(this,"버튼 선택 → 오른쪽에서 편집",413,125,360,26,9,Color.FromArgb(156,173,193));
+            TextAt(this,"위 10개 편집 · 아래 3개 사용량",413,125,360,26,9,Color.FromArgb(156,173,193));
             for(int i=0;i<13;i++) {
-                int k=i; var b=ButtonAt(this,"",32+(i%5)*147,170+(i/5)*125,135,113,()=>{selected=k;PaintSelection();LoadKey();}); keys[i]=b;
-                b.BackgroundImageLayout=ImageLayout.Zoom; b.AccessibleName="버튼 "+(i+1);tips.SetToolTip(b,"클릭하여 편집 · 장치 버튼을 누르면 저장된 동작 실행");
+                int k=i; var b=ButtonAt(this,"",32+(i%5)*147,170+(i/5)*125,135,113,()=>{if(k>=10){TryLaunch(UsageMeters.Binding(k-10));return;}selected=k;PaintSelection();LoadKey();}); keys[i]=b;
+                b.BackgroundImageLayout=ImageLayout.Zoom; b.AccessibleName="버튼 "+(i+1);tips.SetToolTip(b,k>=10?UsageMeters.Names[k-10]+" 구독 사용량 · 클릭하여 사용량 페이지 열기"+(k==12?" · 설정 → 사용량 한도":""):"클릭하여 편집 · 장치 버튼을 누르면 저장된 동작 실행");
             }
             widePreview=new PictureBox {Location=new Point(473,420),Size=new Size(282,113),BackColor=surface,SizeMode=PictureBoxSizeMode.StretchImage,AccessibleName="가로 화면: 시계 / 세 노브 볼륨"};Controls.Add(widePreview);PreviewClock();
             TextAt(this,"AUDIO CONTROLS",32,563,400,25,10,Color.FromArgb(156,173,193));
@@ -120,7 +121,7 @@ namespace UlanziLite {
         void ShowEditor() {Show();WindowState=FormWindowState.Normal;Activate();}
         void ChangePage(int direction) {pages.SelectedIndex=(config.Page+direction+config.Pages.Count)%config.Pages.Count;}
         void PaintKeys() {
-            for(int i=0;i<keys.Length;i++) {var old=keys[i].BackgroundImage;keys[i].BackgroundImage=Artwork.Render(config.Pages[config.Page].Keys[i]); if(old!=null)old.Dispose();}
+            for(int i=0;i<keys.Length;i++) {var old=keys[i].BackgroundImage;keys[i].BackgroundImage=i>=10?UsageMeters.Render(i-10):Artwork.Render(config.Pages[config.Page].Keys[i]); if(old!=null)old.Dispose();}
             PaintSelection();
         }
         void PaintSelection() {if(editState!=null)UpdateEditState();for(int i=0;i<13;i++){keys[i].FlatAppearance.BorderSize=i==selected?3:1;keys[i].FlatAppearance.BorderColor=i==selected?accent:Color.FromArgb(52,65,81);}}
@@ -141,7 +142,7 @@ namespace UlanziLite {
             bool dirty=drafts.ContainsKey(DraftId);editState.Text=dirty?"● 저장 전":"저장됨";editState.ForeColor=dirty?Color.FromArgb(244,186,112):accent;
             saveButton.Text=dirty?"변경 저장 · 장치에 적용":"저장 · 장치에 적용";
             Text="Ulanzi Lite · D200X"+(drafts.Count>0?" · 편집 중 "+drafts.Count:"");
-            for(int i=0;i<keys.Length;i++){var key=config.Pages[config.Page].Keys[i];keys[i].AccessibleName="버튼 "+(i+1)+" · "+key.Label+(drafts.ContainsKey(config.Page*13+i)?" · 저장 전":"");keys[i].Text=drafts.ContainsKey(config.Page*13+i)?"●":"";keys[i].TextAlign=ContentAlignment.TopRight;}
+            for(int i=0;i<keys.Length;i++){var key=config.Pages[config.Page].Keys[i];keys[i].AccessibleName="버튼 "+(i+1)+" · "+(i>=10?UsageMeters.Names[i-10]+" 사용량":key.Label)+(drafts.ContainsKey(config.Page*13+i)?" · 저장 전":"");keys[i].Text=drafts.ContainsKey(config.Page*13+i)?"●":"";keys[i].TextAlign=ContentAlignment.TopRight;}
         }
         bool FinishEditing() {
             if(drafts.Count==0)return true;
@@ -172,7 +173,7 @@ namespace UlanziLite {
         void HandleInput(int index,int state) {
             lastEvent="입력 "+index+":"+state;Program.Log(lastEvent);
             if(index>=17 && index<=19) {if(state==1)ControlAudio(index-17,0,true);else if(state==2 || state==3)ControlAudio(index-17,(state==2?-1:1)*config.Step,false);}
-            else if(state==1){if(index>=0 && index<13)TryLaunch(config.Pages[config.Page].Keys[index]);else if(index==15 || index==16)ChangePage(index==15?-1:1);}
+            else if(state==1){if(index>=0 && index<13)TryLaunch(index>=10?UsageMeters.Binding(index-10):config.Pages[config.Page].Keys[index]);else if(index==15 || index==16)ChangePage(index==15?-1:1);}
         }
         void ControlAudio(int knob,int delta,bool toggle) {var result=audio.Control(knob,delta,toggle);levels[knob].Text=result.ToString();details[knob].Text=result.Detail;string message=(knob==0?"마이크":knob==1?(audio.ForegroundName??"현재 앱"):"전체 출력")+" · "+result.ToString();Program.Log("Audio knob="+knob+" delta="+delta+" toggle="+toggle+" available="+result.Available+" "+message+" · "+result.Detail);Feedback(message,!result.Available);wideState.Touch(uptime.ElapsedMilliseconds,knob);}
         void PreviewClock() {SetWidePreview(WideArtwork.Clock(DateTime.Now));}
@@ -201,6 +202,23 @@ namespace UlanziLite {
                 if(showAudio || wasAudio)Program.Log("Wide display: "+(showAudio?"audio":"clock image")+" ("+bundle.Length+" bytes)");
             }catch(Exception ex){wideState.MarkSent(true,-1);nextWideAttempt=uptime.ElapsedMilliseconds+1000;Program.Log("Wide display update failed: "+ex.Message);}
             finally {displayWriter.Release();updatingWide=false;}
+        }
+        async Task PumpUsageDisplay() {
+            await usageReader.RefreshAsync();
+            if(IsDisposed)return;
+            int revision=UsageMeters.Revision;long minute=DateTime.UtcNow.Ticks/TimeSpan.TicksPerMinute;
+            if(updatingUsage || syncing || updatingWide || (usageRevision==revision && usageMinute==minute))return;
+            updatingUsage=true;
+            try {
+                for(int i=10;i<13;i++){var old=keys[i].BackgroundImage;keys[i].BackgroundImage=UsageMeters.Render(i-10);if(old!=null)old.Dispose();}
+                if(deck.IsConnected){
+                    await displayWriter.WaitAsync();
+                    try {var bundle=await Task.Run(()=>Artwork.UsageBundle());await deck.Send(13,bundle,true);}
+                    finally {displayWriter.Release();}
+                }
+                usageRevision=revision;usageMinute=minute;
+            }catch(Exception ex){Program.Log("Usage display update failed: "+ex.Message);}
+            finally {updatingUsage=false;}
         }
         void RefreshAudio() {audio.TrackForeground();for(int i=0;i<3;i++){var result=audio.Control(i,0,false);levels[i].Text=result.Available?result.ToString():"—";details[i].Text=result.Detail;}}
         void Feedback(string text,bool error) {feedback.Text=text;feedback.ForeColor=error?Color.FromArgb(250,174,132):accent;if(error)Program.Log(text);}

@@ -103,7 +103,12 @@ namespace UlanziLite {
         }
         public static byte[] Bundle(DeckPage page,byte[] wideImage=null) {
             var icons=new Dictionary<int,byte[]>();
-            for(int i=0;i<14;i++) {if(i==13 && wideImage!=null){icons[i]=wideImage;continue;}using(var image=i==13?new Bitmap(196,196):Render(page.Keys[i]))using(var ms=new MemoryStream()) {image.Save(ms,ImageFormat.Png);icons[i]=ms.ToArray();}}
+            for(int i=0;i<14;i++) {if(i==13 && wideImage!=null){icons[i]=wideImage;continue;}using(var image=i==13?new Bitmap(196,196):i>=10?UsageMeters.Render(i-10):Render(page.Keys[i]))using(var ms=new MemoryStream()) {image.Save(ms,ImageFormat.Png);icons[i]=ms.ToArray();}}
+            return BundleForIcons(icons);
+        }
+        public static byte[] UsageBundle() {
+            var icons=new Dictionary<int,byte[]>();
+            for(int i=0;i<3;i++)using(var image=UsageMeters.Render(i))using(var ms=new MemoryStream()){image.Save(ms,ImageFormat.Png);icons[i+10]=ms.ToArray();}
             return BundleForIcons(icons);
         }
         public static byte[] WideBundle(byte[] png) {return BundleForIcons(new Dictionary<int,byte[]> {{13,png}});}

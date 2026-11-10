@@ -16,7 +16,9 @@ namespace UlanziLite {
             }catch { }
         }
         [STAThread] static int Main(string[] args) {
+            if(args.Contains("--usage-test"))return LocalUsageReader.Diagnose();
             if(args.Contains("--render")) {
+                if(args.Contains("--live-usage"))new LocalUsageReader().RefreshAsync().GetAwaiter().GetResult();
                 Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);
                 using(var form=new MainForm(Configuration.Defaults(),true)) {
                     form.Show();Application.DoEvents();using(var bitmap=new System.Drawing.Bitmap(form.Width,form.Height)) {
