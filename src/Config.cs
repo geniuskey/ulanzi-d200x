@@ -13,18 +13,18 @@ using System.Web.Script.Serialization;
 
 namespace UlanziLite {
     public class KeyBinding {
-        public string Label="빈 버튼", Kind="website", Target="", Image="", Color="#273349";
+        public string Label="Empty", Kind="website", Target="", Image="", Color="#273349";
         public void Validate(bool validateImage=true) {
-            if(Label==null || Label.Length>40)throw new ArgumentException("이름은 40자까지 입력해 주세요.");
-            if(Kind!="website" && Kind!="application")throw new ArgumentException("지원하지 않는 버튼 종류입니다.");
-            try { System.Drawing.ColorTranslator.FromHtml(Color); }catch {throw new ArgumentException("버튼 색상 형식이 올바르지 않습니다.");}
+            if(Label==null || Label.Length>40)throw new ArgumentException("Name must be 40 characters or fewer.");
+            if(Kind!="website" && Kind!="application")throw new ArgumentException("Unsupported button action.");
+            try { System.Drawing.ColorTranslator.FromHtml(Color); }catch {throw new ArgumentException("Invalid button color.");}
             if(validateImage && !String.IsNullOrWhiteSpace(Image)) {
-                if(!File.Exists(Image))throw new ArgumentException("아이콘 이미지 파일을 찾을 수 없습니다. 다시 선택하거나 비워 주세요.");
-                try {using(var img=System.Drawing.Image.FromFile(Image)) { }}catch {throw new ArgumentException("이미지를 읽을 수 없습니다. PNG, JPG 또는 BMP 파일을 선택해 주세요.");}
+                if(!File.Exists(Image))throw new ArgumentException("Icon image not found. Choose another image or clear it.");
+                try {using(var img=System.Drawing.Image.FromFile(Image)) { }}catch {throw new ArgumentException("Cannot read image. Choose a PNG, JPG or BMP file.");}
             }
             if(String.IsNullOrWhiteSpace(Target))return;
-            if(Kind=="website") { Uri uri; if(!Uri.TryCreate(Target,UriKind.Absolute,out uri) || (uri.Scheme!="https" && uri.Scheme!="http") || String.IsNullOrEmpty(uri.Host))throw new ArgumentException("http:// 또는 https:// 주소를 입력해 주세요."); }
-            else if(Kind=="application") { if(!File.Exists(Target) && !Directory.Exists(Target))throw new ArgumentException("앱 또는 파일 경로를 찾을 수 없습니다."); }
+            if(Kind=="website") { Uri uri; if(!Uri.TryCreate(Target,UriKind.Absolute,out uri) || (uri.Scheme!="https" && uri.Scheme!="http") || String.IsNullOrEmpty(uri.Host))throw new ArgumentException("Enter an http:// or https:// URL."); }
+            else if(Kind=="application") { if(!File.Exists(Target) && !Directory.Exists(Target))throw new ArgumentException("App or file path not found."); }
         }
         public void Launch() { Validate(false); if(!String.IsNullOrWhiteSpace(Target))Process.Start(new ProcessStartInfo(Target) {UseShellExecute=true}); }
     }
@@ -50,7 +50,7 @@ namespace UlanziLite {
         }
         public static Configuration Defaults() {
             var config=new Configuration();
-            for(int p=0;p<3;p++) { var page=new DeckPage {Name=new[]{"자주 쓰는 것","작업","미디어"}[p]}; for(int i=0;i<13;i++)page.Keys.Add(new KeyBinding()); config.Pages.Add(page); }
+            for(int p=0;p<3;p++) { var page=new DeckPage {Name=new[]{"Everyday","Work","Media"}[p]}; for(int i=0;i<13;i++)page.Keys.Add(new KeyBinding()); config.Pages.Add(page); }
             var apps=InstalledApps(); string[] names={"Google Chrome","Notion","Discord","Visual Studio 2022","Obsidian","File Explorer"};
             string[] colors={"#264E69","#353742","#47488D","#5A3A83","#514079","#71602C"};
             for(int i=0;i<names.Length;i++) { string path=apps.FirstOrDefault(a=>String.Equals(System.IO.Path.GetFileNameWithoutExtension(a),names[i],StringComparison.OrdinalIgnoreCase)); if(path!=null)config.Pages[0].Keys[i]=new KeyBinding {Label=names[i],Kind="application",Target=path,Color=colors[i]}; }
@@ -64,9 +64,9 @@ namespace UlanziLite {
         }
         public static Configuration Parse(string text) {
             Configuration c;
-            try {c=Json.Deserialize<Configuration>(text);}catch(Exception ex){throw new InvalidDataException("설정 JSON을 읽을 수 없습니다. settings.json.bak으로 복구할 수 있습니다.",ex);}
-            if(c==null || c.Version!=1 || c.Pages==null || c.Pages.Count==0 || c.Pages.Count>20)throw new InvalidDataException("설정 파일 형식이 올바르지 않습니다.");
-            foreach(var p in c.Pages) { if(p==null || p.Keys==null || p.Keys.Count!=13 || p.Keys.Any(k=>k==null))throw new InvalidDataException("페이지에 버튼 13개가 필요합니다."); if(String.IsNullOrWhiteSpace(p.Name))p.Name="페이지 "+(c.Pages.IndexOf(p)+1); foreach(var k in p.Keys) { k.Label=k.Label??""; k.Target=k.Target??""; k.Image=k.Image??""; if(k.Color==null)k.Color="#273349"; if(k.Kind!="website" && k.Kind!="application")throw new InvalidDataException("지원하지 않는 버튼 종류입니다."); } }
+            try {c=Json.Deserialize<Configuration>(text);}catch(Exception ex){throw new InvalidDataException("Cannot read settings JSON. Restore from settings.json.bak.",ex);}
+            if(c==null || c.Version!=1 || c.Pages==null || c.Pages.Count==0 || c.Pages.Count>20)throw new InvalidDataException("Invalid settings format.");
+            foreach(var p in c.Pages) { if(p==null || p.Keys==null || p.Keys.Count!=13 || p.Keys.Any(k=>k==null))throw new InvalidDataException("Each page requires 13 buttons."); if(String.IsNullOrWhiteSpace(p.Name))p.Name="Page "+(c.Pages.IndexOf(p)+1); foreach(var k in p.Keys) { k.Label=k.Label??""; k.Target=k.Target??""; k.Image=k.Image??""; if(k.Color==null)k.Color="#273349"; if(k.Kind!="website" && k.Kind!="application")throw new InvalidDataException("Unsupported button action."); } }
             c.Page=Math.Max(0,Math.Min(c.Pages.Count-1,c.Page)); c.Step=Math.Max(1,Math.Min(10,c.Step)); c.Brightness=Math.Max(0,Math.Min(100,c.Brightness));c.OverlaySeconds=Math.Max(1,Math.Min(30,c.OverlaySeconds)); return c;
         }
         public void Save() {
@@ -146,7 +146,7 @@ namespace UlanziLite {
                     if(clean)return data;
                 }
             }
-            throw new IOException("장치용 이미지 묶음을 만들지 못했습니다. 다시 저장해 주세요.");
+            throw new IOException("Could not create device image bundle. Save again.");
         }
         static void WriteEntry(ZipArchive zip,string name,byte[] bytes) {var entry=zip.CreateEntry(name,CompressionLevel.Optimal); using(var s=entry.Open())s.Write(bytes,0,bytes.Length);}
     }

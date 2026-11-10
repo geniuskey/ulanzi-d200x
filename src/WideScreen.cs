@@ -33,7 +33,7 @@ namespace UlanziLite {
             using(var g=Graphics.FromImage(bitmap))using(var label=new Font(Typography.UiFontName,15,FontStyle.Bold))using(var number=new Font(Typography.NumberFontName,31,FontStyle.Regular))using(var detail=new Font(Typography.UiFontName,10)) {
                 g.Clear(Background);g.SmoothingMode=SmoothingMode.AntiAlias;g.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                 g.SetClip(new Rectangle(0,0,392,SafeHeight));
-                string[] names={"마이크","현재 앱","전체 출력"};
+                string[] names={"Mic","Active app","Master"};
                 for(int i=0;i<3;i++) {
                     var state=states[i]??new AudioState();int x=i*130;Color color=state.Muted?Color.FromArgb(255,140,140):Accent;
                     if(i==active)using(var brush=new SolidBrush(Color.FromArgb(26,44,48)))g.FillRectangle(brush,x+3,7,126,174);
@@ -41,7 +41,7 @@ namespace UlanziLite {
                     Text(g,state.Available?Math.Round(state.Level*100)+"%":"—",number,state.Available?Color.White:Color.Gray,new Rectangle(x+1,51,129,62));
                     using(var brush=new SolidBrush(Color.FromArgb(48,60,73)))g.FillRectangle(brush,x+15,124,102,7);
                     if(state.Available)using(var brush=new SolidBrush(color))g.FillRectangle(brush,x+15,124,(int)Math.Round(102*Math.Max(0,Math.Min(1,state.Level))),7);
-                    string note=!state.Available?"연결 / 소리 대기":state.Muted?"음소거":i==1?(appName??"앱"):"";
+                    string note=!state.Available?"Waiting for audio":state.Muted?"Mute":i==1?(appName??"App"):"";
                     Text(g,note,detail,state.Muted?color:Color.FromArgb(168,184,201),new Rectangle(x+5,142,120,33));
                 }
             }return bitmap;
@@ -59,7 +59,7 @@ namespace UlanziLite {
                 using(var fitted=new Font(Typography.NumberFontName,fittedSize,FontStyle.Regular,GraphicsUnit.Pixel))
                     Text(g,timeText,fitted,Color.White,new Rectangle(5,18,292,126));
                 Text(g,time.ToString("ss"),seconds,Accent,new Rectangle(296,53,86,63));
-                Text(g,time.ToString("yyyy.MM.dd  ddd"),date,Color.FromArgb(168,184,201),new Rectangle(10,137,372,35));
+                Text(g,time.ToString("yyyy.MM.dd  ddd",System.Globalization.CultureInfo.InvariantCulture),date,Color.FromArgb(168,184,201),new Rectangle(10,137,372,35));
             }return bitmap;
         }
         // Firmware stretches a square PNG across the two-cell wide display.

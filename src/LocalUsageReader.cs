@@ -36,16 +36,16 @@ namespace UlanziLite {
             }finally {refreshing=false;}
         }
         void Fetch(int index,Func<UsageReading> read) {
-            try {var value=read();if(value!=null && (value.SessionUsed.HasValue || value.WeeklyUsed.HasValue)){UsageMeters.Update(value);UsageMeters.SetStatus(index,"연결됨");}else UsageMeters.SetStatus(index,"사용량 정보 없음");}
-            catch(LoginExpiredException){UsageMeters.SetStatus(index,"CLI 재로그인 필요");}
-            catch(FileNotFoundException){UsageMeters.SetStatus(index,"CLI 로그인 필요");}
-            catch(DirectoryNotFoundException){UsageMeters.SetStatus(index,"CLI 로그인 필요");}
+            try {var value=read();if(value!=null && (value.SessionUsed.HasValue || value.WeeklyUsed.HasValue)){UsageMeters.Update(value);UsageMeters.SetStatus(index,"Connected");}else UsageMeters.SetStatus(index,"No usage data");}
+            catch(LoginExpiredException){UsageMeters.SetStatus(index,"Sign in to CLI again");}
+            catch(FileNotFoundException){UsageMeters.SetStatus(index,"CLI sign-in required");}
+            catch(DirectoryNotFoundException){UsageMeters.SetStatus(index,"CLI sign-in required");}
             catch(WebException ex) {
                 var response=ex.Response as HttpWebResponse;int code=response==null?0:(int)response.StatusCode;
-                UsageMeters.SetStatus(index,code==401?"CLI 재로그인 필요":code==403?"CLI 조회 권한 없음":code==429?"조회 제한 · 재시도":code==0?"네트워크 확인":"조회 오류 · "+code);
+                UsageMeters.SetStatus(index,code==401?"Sign in to CLI again":code==403?"CLI access denied":code==429?"Rate limited · Retrying":code==0?"Check network":"Request error · "+code);
                 if(response!=null)response.Dispose();
             }
-            catch {UsageMeters.SetStatus(index,"CLI 정보 확인 필요");}
+            catch {UsageMeters.SetStatus(index,"Check CLI credentials");}
         }
         internal static UsageReading ParseCodex(string line) {
             var item=Parse(line);var payload=Field(item,"payload");

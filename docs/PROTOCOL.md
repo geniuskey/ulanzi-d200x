@@ -1,21 +1,21 @@
-# D200X 프로토콜 메모
+# D200X protocol notes
 
-공개된 [edubox/opendeck-ulanzi-d200x](https://github.com/edubox/opendeck-ulanzi-d200x)의 프로토콜 정보를 참고한 독립 구현입니다. 해당 플러그인이나 Ulanzi Studio를 실행할 필요는 없습니다. 비공식 프로토콜이며 펌웨어별 호환성은 달라질 수 있습니다.
+An independent implementation informed by public protocol information from [edubox/opendeck-ulanzi-d200x](https://github.com/edubox/opendeck-ulanzi-d200x). Neither that plugin nor Ulanzi Studio is required. This is an unofficial protocol; firmware compatibility can vary.
 
-USB VID/PID는 `2207:0019`입니다. 입력/출력 길이가 1024바이트 이상인 HID 인터페이스를 선택합니다. 확인된 장치의 Windows 보고서 길이는 각각 1025바이트입니다.
+USB VID/PID: `2207:0019`. Select a HID interface whose input/output reports are at least 1024 bytes. The observed Windows report lengths are 1025 bytes in both directions.
 
-| 필드 | 길이 | 내용 |
+| Field | Length | Encoding |
 | --- | --- | --- |
-| 헤더 | 2 | `7c 7c` |
-| 명령 | 2 | big-endian |
-| 본문 전체 길이 | 4 | little-endian |
-| 첫 본문 | 최대 1016 | 첫 1024바이트 프레임의 나머지 |
-| 후속 본문 | 프레임당 최대 1024 | 묶음 전송 시 원본 데이터의 연속 바이트 |
+| Header | 2 | `7c 7c` |
+| Command | 2 | Big-endian |
+| Total body length | 4 | Little-endian |
+| First body chunk | Up to 1016 | Remainder of the first 1024-byte frame |
+| Subsequent body chunks | Up to 1024 per frame | Consecutive bytes from the original payload |
 
-Windows HID 보고서가 1025바이트이면 앞에 보고서 ID `0`을 추가합니다. 이미지는 196×196 PNG와 `manifest.json`을 ZIP으로 묶습니다. 가로 화면은 392×196으로 그린 후 펌웨어 입력용 196×196으로 압축합니다. ZIP 경계의 특정 바이트를 펌웨어가 잘못 해석하는 현상을 피하기 위해 패딩을 조정합니다. 관련 검증을 제거하지 마세요.
+For 1025-byte Windows HID reports, prepend report ID `0`. Package 196×196 PNG images with `manifest.json` in a ZIP. Draw the wide display at 392×196, then compress it to 196×196 for firmware input. Adjust padding to avoid firmware misinterpreting particular bytes at ZIP packet boundaries. Keep the corresponding tests.
 
-사용하는 명령은 페이지 이미지 `0x0001`, 화면 모드 `0x0006`, 밝기 `0x000a`, 제목 스타일 `0x000b`입니다. 가로 화면은 manifest의 `3_2` 위치입니다. 시계·사용량 갱신도 14개 화면의 manifest와 PNG를 모두 포함한 페이지 이미지로 전송합니다. 일부 화면만 포함한 `0x000d` 전송은 다른 이미지가 나중에 검게 표시되는 호환성 문제가 의심되어 사용하지 않습니다. 변경 없는 버튼 PNG는 메모리에 보관하고 페이지 동기화 때 교체합니다.
+Commands used: page images `0x0001`, display mode `0x0006`, brightness `0x000a`, and title style `0x000b`. The wide display occupies manifest position `3_2`. Clock and usage updates also upload complete page bundles with a manifest and all 14 display images. Partial `0x000d` transfers are avoided because they may cause other images to go black later. Unchanged button PNGs stay in memory and are replaced when synchronizing a page.
 
-입력 이벤트 `0x0101`/`0x0102` 본문에서 인덱스와 상태를 읽습니다. 버튼 인덱스는 `0..12`, 페이지 이동은 `15/16`, 노브는 `17/18/19`입니다. 상태 `1/2/3`은 누름/왼쪽 회전/오른쪽 회전입니다.
+Input events `0x0101` / `0x0102` contain an index and state. Button indices are `0..12`, page navigation uses `15/16`, and knobs use `17/18/19`. States `1/2/3` mean press / turn left / turn right.
 
-시계는 PC 시간으로 이미지를 그려 초당 한 번 갱신합니다. 볼륨 표시는 입력 이후 설정된 시간 동안 유지합니다. 250ms 타이머에서 갱신을 합치며, 페이지 이미지와 가로 화면은 하나의 쓰기 잠금으로 순서를 보장합니다.
+The clock renders PC local time once per second. The audio overlay remains visible for the configured time after input. A 250 ms timer coalesces updates; page and wide-display uploads share one write lock to preserve ordering.

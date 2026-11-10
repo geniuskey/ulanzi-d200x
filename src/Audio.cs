@@ -52,7 +52,7 @@ namespace UlanziLite {
     }
     public sealed class AudioState {
         public float Level; public bool Muted, Available; public string Detail;
-        public override string ToString() { return Available ? Math.Round(Level*100)+"%"+(Muted?" · 음소거":"") : Detail; }
+        public override string ToString() { return Available ? Math.Round(Level*100)+"%"+(Muted?" · Muted":"") : Detail; }
     }
     public sealed class AudioController {
         [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
@@ -81,8 +81,8 @@ namespace UlanziLite {
                 volume.GetMasterVolumeLevelScalar(out level); volume.GetMute(out muted);
                 if(toggle) { muted=!muted; volume.SetMute(muted,ref context); }
                 if(delta!=0) { level=Clamp(level+delta/100f); volume.SetMasterVolumeLevelScalar(level,ref context); }
-                return new AudioState { Level=level,Muted=muted,Available=true,Detail=microphone?"기본 통신 마이크":"기본 출력 장치" };
-            } catch(Exception ex) { return new AudioState {Detail=(microphone?"마이크":"출력 장치")+" 사용 불가: "+ex.Message}; }
+                return new AudioState { Level=level,Muted=muted,Available=true,Detail=microphone?"Default communications microphone":"Default output device" };
+            } catch(Exception ex) { return new AudioState {Detail=(microphone?"Mic":"Output device")+" unavailable: "+ex.Message}; }
             finally { Release(volumeObj); Release(device); Release(enumerator); }
         }
         bool Matches(uint pid) {
@@ -109,7 +109,7 @@ namespace UlanziLite {
                         }
                     } finally { Release(sessions); Release(managerObj); Release(device); }
                 }
-                if(matches.Count==0)return new AudioState {Detail=(ForegroundName??"앱 선택 대기")+" · 오디오 세션 없음"};
+                if(matches.Count==0)return new AudioState {Detail=(ForegroundName??"Waiting for an app")+" · No audio session"};
                 bool anyUnmuted=false; float total=0;
                 foreach(var session in matches) { var v=(ISimpleAudioVolume)session; bool muted; v.GetMute(out muted); if(!muted)anyUnmuted=true; }
                 foreach(var session in matches) {
@@ -118,7 +118,7 @@ namespace UlanziLite {
                     if(toggle)volume.SetMute(anyUnmuted,ref context); total+=level;
                 }
                 return new AudioState {Available=true, Level=total/matches.Count,Muted=toggle?anyUnmuted:!anyUnmuted,Detail=ForegroundName};
-            } catch(Exception ex) { return new AudioState {Detail="앱 소리 사용 불가: "+ex.Message}; }
+            } catch(Exception ex) { return new AudioState {Detail="App audio unavailable: "+ex.Message}; }
             finally { foreach(var s in matches)Release(s); Release(devices); Release(enumerator); }
         }
         public AudioState Control(int knob,int delta,bool toggle) { TrackForeground(); return knob==1?ApplicationVolume(delta,toggle):Endpoint(knob==0,delta,toggle); }

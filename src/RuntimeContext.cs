@@ -18,7 +18,7 @@ namespace UlanziLite {
         public static bool IsIsolatedDesktop(string name) {return name!=null && name.StartsWith("CodexSandboxDesktop-",StringComparison.OrdinalIgnoreCase);}
         public static string StartupProblem() {
             string desktop=Name(GetThreadDesktop(GetCurrentThreadId()));
-            return IsIsolatedDesktop(desktop)?"격리된 테스트 데스크톱에서는 앱 실행과 현재 앱 감지가 제한됩니다. 테스트 프로세스는 시작하지 않았습니다. 파일 탐색기에서 UlanziLite.exe를 직접 실행해 주세요.":null;
+            return IsIsolatedDesktop(desktop)?"App launching and foreground detection are limited on isolated test desktops. No test process was started. Run UlanziLite.exe directly from File Explorer.":null;
         }
         public static string Describe() {
             string current=Name(GetThreadDesktop(GetCurrentThreadId()));string station=Name(GetProcessWindowStation());

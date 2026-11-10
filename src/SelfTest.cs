@@ -29,14 +29,14 @@ namespace UlanziLite {
             Check(Rejects(()=>Configuration.Parse("{\"Pages\":[{\"Keys\":[null]}]}")),"reject malformed key layout");
             var config=Configuration.Defaults();config.Page=999;config.Step=-1;config.Brightness=200;config.OverlaySeconds=0;config.Pages[0].Name=null;
             var normalized=Configuration.Parse(Configuration.Json.Serialize(config));
-            Check(normalized.Page==2 && normalized.Step==1 && normalized.Brightness==100 && normalized.OverlaySeconds==1 && normalized.Pages[0].Name=="페이지 1","normalize settings bounds and missing page names");
+            Check(normalized.Page==2 && normalized.Step==1 && normalized.Brightness==100 && normalized.OverlaySeconds==1 && normalized.Pages[0].Name=="Page 1","normalize settings bounds and missing page names");
             string folder=Path.Combine(Path.GetTempPath(),"UlanziLite-test-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
             try {
-                string path=Path.Combine(folder,"settings.json");config.Pages[0].Keys[0].Label="처음";config.SaveTo(path);
-                Check(Configuration.Parse(File.ReadAllText(path)).Pages[0].Keys[0].Label=="처음","save configuration to a new file");
-                config.Pages[0].Keys[0].Label="수정";config.SaveTo(path);
-                Check(Configuration.Parse(File.ReadAllText(path)).Pages[0].Keys[0].Label=="수정","atomic configuration replacement");
-                Check(Configuration.Parse(File.ReadAllText(path+".bak")).Pages[0].Keys[0].Label=="처음" && !File.Exists(path+".tmp"),"preserve previous configuration and clean temporary file");
+                string path=Path.Combine(folder,"settings.json");config.Pages[0].Keys[0].Label="Original";config.SaveTo(path);
+                Check(Configuration.Parse(File.ReadAllText(path)).Pages[0].Keys[0].Label=="Original","save configuration to a new file");
+                config.Pages[0].Keys[0].Label="Updated";config.SaveTo(path);
+                Check(Configuration.Parse(File.ReadAllText(path)).Pages[0].Keys[0].Label=="Updated","atomic configuration replacement");
+                Check(Configuration.Parse(File.ReadAllText(path+".bak")).Pages[0].Keys[0].Label=="Original" && !File.Exists(path+".tmp"),"preserve previous configuration and clean temporary file");
             }finally{Directory.Delete(folder,true);}
         }
         static void CheckUsageMeters() {
@@ -155,10 +155,10 @@ namespace UlanziLite {
             var config=Configuration.Defaults();
             using(var form=new MainForm(config,true)) {
                 form.Show();Application.DoEvents();
-                var name=Descendants(form).OfType<TextBox>().Single(c=>c.AccessibleName=="표시 이름");
-                var pages=Descendants(form).OfType<ComboBox>().Single(c=>c.AccessibleName=="페이지 선택");
+                var name=Descendants(form).OfType<TextBox>().Single(c=>c.AccessibleName=="Display name");
+                var pages=Descendants(form).OfType<ComboBox>().Single(c=>c.AccessibleName=="Select page");
                 var buttons=Descendants(form).OfType<Button>().ToList();
-                var first=buttons.Single(c=>c.AccessibleName.StartsWith("버튼 1 ·"));var second=buttons.Single(c=>c.AccessibleName.StartsWith("버튼 2 ·"));
+                var first=buttons.Single(c=>c.AccessibleName.StartsWith("Button 1 ·"));var second=buttons.Single(c=>c.AccessibleName.StartsWith("Button 2 ·"));
                 CheckEditorLayout(form,"default window keeps editor and audio controls within their containers");
                 foreach(int width in new[]{1120,1500}) {
                     form.ClientSize=new System.Drawing.Size(width,860);Application.DoEvents();
@@ -166,36 +166,36 @@ namespace UlanziLite {
                     using(var bitmap=new System.Drawing.Bitmap(form.Width,form.Height)){form.DrawToBitmap(bitmap,new System.Drawing.Rectangle(0,0,form.Width,form.Height));bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layout-"+width+".png"));}
                 }
                 form.ClientSize=new System.Drawing.Size(1180,860);Application.DoEvents();
-                var kind=Descendants(form).OfType<ComboBox>().Single(c=>c.AccessibleName=="버튼 동작");
+                var kind=Descendants(form).OfType<ComboBox>().Single(c=>c.AccessibleName=="Button action");
                 kind.SelectedIndex=0;
-                Check(!buttons.Single(c=>c.AccessibleName=="파일 찾기").Enabled && !buttons.Single(c=>c.AccessibleName=="폴더 찾기").Enabled,"website action disables irrelevant file browsing");
+                Check(!buttons.Single(c=>c.AccessibleName=="Browse file").Enabled && !buttons.Single(c=>c.AccessibleName=="Browse folder").Enabled,"website action disables irrelevant file browsing");
                 kind.SelectedIndex=1;
-                Check(buttons.Single(c=>c.AccessibleName=="파일 찾기").Enabled,"application action enables file browsing");
+                Check(buttons.Single(c=>c.AccessibleName=="Browse file").Enabled,"application action enables file browsing");
                 kind.SelectedIndex=config.Pages[0].Keys[0].Kind=="application"?1:0;
                 string original=config.Pages[0].Keys[0].Label;
-                name.Text="편집 보존";
-                var preview=Descendants(form).OfType<PictureBox>().Single(c=>c.AccessibleName=="편집 중인 버튼 미리보기");
-                Check(first.Text=="●" && first.AccessibleName.Contains("편집 보존") && preview.Image!=null,"draft updates button artwork, accessible name and preview");
-                buttons.Single(c=>c.AccessibleName=="편집 취소").PerformClick();
-                Check(name.Text==original && first.Text=="" && !form.Text.Contains("편집 중"),"cancel restores selected draft and clears its marker");
-                name.Text="편집 보존";second.PerformClick();first.PerformClick();
-                Check(name.Text=="편집 보존" && config.Pages[0].Keys[0].Label==original,"switching keys preserves draft without changing saved action");
+                name.Text="Draft retained";
+                var preview=Descendants(form).OfType<PictureBox>().Single(c=>c.AccessibleName=="Button draft preview");
+                Check(first.Text=="●" && first.AccessibleName.Contains("Draft retained") && preview.Image!=null,"draft updates button artwork, accessible name and preview");
+                buttons.Single(c=>c.AccessibleName=="Cancel edit").PerformClick();
+                Check(name.Text==original && first.Text=="" && !form.Text.Contains("Editing"),"cancel restores selected draft and clears its marker");
+                name.Text="Draft retained";second.PerformClick();first.PerformClick();
+                Check(name.Text=="Draft retained" && config.Pages[0].Keys[0].Label==original,"switching keys preserves draft without changing saved action");
                 pages.SelectedIndex=1;pages.SelectedIndex=0;
-                Check(name.Text=="편집 보존","switching pages preserves draft");
-                buttons.Single(c=>c.AccessibleName=="저장 · 장치에 적용").PerformClick();
-                Check(config.Pages[0].Keys[0].Label=="편집 보존" && !form.Text.Contains("편집 중"),"save commits selected draft and clears dirty state");
-                var target=Descendants(form).OfType<TextBox>().Single(c=>c.AccessibleName=="주소 또는 실행 경로");
-                Descendants(form).OfType<ComboBox>().Single(c=>c.AccessibleName=="버튼 동작").SelectedIndex=0;
+                Check(name.Text=="Draft retained","switching pages preserves draft");
+                buttons.Single(c=>c.AccessibleName=="Save and apply to device").PerformClick();
+                Check(config.Pages[0].Keys[0].Label=="Draft retained" && !form.Text.Contains("Editing"),"save commits selected draft and clears dirty state");
+                var target=Descendants(form).OfType<TextBox>().Single(c=>c.AccessibleName=="URL or launch path");
+                Descendants(form).OfType<ComboBox>().Single(c=>c.AccessibleName=="Button action").SelectedIndex=0;
                 target.Text="javascript:alert(1)";
                 string savedTarget=config.Pages[0].Keys[0].Target;
-                buttons.Single(c=>c.AccessibleName=="저장 · 장치에 적용").PerformClick();
-                Check(config.Pages[0].Keys[0].Target==savedTarget && form.Text.Contains("편집 중"),"invalid save preserves saved action and editable draft");
-                var validation=Descendants(form).OfType<Label>().Single(c=>c.AccessibleName=="편집 입력 오류");
+                buttons.Single(c=>c.AccessibleName=="Save and apply to device").PerformClick();
+                Check(config.Pages[0].Keys[0].Target==savedTarget && form.Text.Contains("Editing"),"invalid save preserves saved action and editable draft");
+                var validation=Descendants(form).OfType<Label>().Single(c=>c.AccessibleName=="Editor validation error");
                 Check(validation.Text.Contains("https://") && form.ActiveControl==target,"invalid URL shows inline guidance and focuses its field");
-                buttons.Single(c=>c.AccessibleName=="편집 취소").PerformClick();
+                buttons.Single(c=>c.AccessibleName=="Cancel edit").PerformClick();
                 Check(validation.Text=="" && target.Text==savedTarget,"cancel clears validation and restores saved input");
-                buttons.Single(c=>c.AccessibleName=="버튼 초기화").PerformClick();
-                Check(name.Text=="빈 버튼" && config.Pages[0].Keys[0].Label=="편집 보존","reset remains a draft until saved");
+                buttons.Single(c=>c.AccessibleName=="Reset button").PerformClick();
+                Check(name.Text=="Empty" && config.Pages[0].Keys[0].Label=="Draft retained","reset remains a draft until saved");
             }
         }
         public static int Run() {
@@ -214,7 +214,7 @@ namespace UlanziLite {
                 packet[4]=255;Check(!Protocol.Parse(packet,12,out index,out state),"reject invalid payload size");
                 bool rejected=false;try{new KeyBinding {Target="javascript:alert(1)"}.Validate();}catch(ArgumentException){rejected=true;}Check(rejected,"reject non-web scheme");
                 var config=Configuration.Defaults(); Check(config.Pages.Count==3 && config.Pages.All(p=>p.Keys.Count==13),"page layout");
-                config.Pages[0].Keys[0]=new KeyBinding {Label="한글 테스트",Target="https://example.com"};
+                config.Pages[0].Keys[0]=new KeyBinding {Label="Unicode test Ω日本語",Target="https://example.com"};
                 byte[] bundle=Artwork.Bundle(config.Pages[0]);
                 for(int p=1016;p<bundle.Length;p+=1024)Check(bundle[p]!=0 && bundle[p]!=0x7c,"firmware packet boundary");
                 using(var zip=new ZipArchive(new MemoryStream(bundle),ZipArchiveMode.Read)) {
@@ -224,7 +224,7 @@ namespace UlanziLite {
                     Check(parsed.Count==14 && parsed.ContainsKey("3_2") && !parsed.ContainsKey("4_2"),"13 keys and wide screen");
                     foreach(var entry in zip.Entries.Where(e=>e.Name.EndsWith(".png")))using(var img=System.Drawing.Image.FromStream(entry.Open()))Check(img.Width==196 && img.Height==196,"native image size");
                 }
-                var clone=Configuration.Json.Deserialize<Configuration>(Configuration.Json.Serialize(config));Check(clone.Pages[0].Keys[0].Label=="한글 테스트","Unicode config roundtrip");
+                var clone=Configuration.Json.Deserialize<Configuration>(Configuration.Json.Serialize(config));Check(clone.Pages[0].Keys[0].Label=="Unicode test Ω日本語","Unicode config roundtrip");
                 var display=new WideScreenState();Check(!display.NeedsUpdate(0),"idle clock sends no extra packets");
                 display.Touch(1000,2);int firstVersion=display.Version;Check(display.WantsAudio(3999) && display.NeedsUpdate(1000),"show volume for three seconds");
                 display.MarkSent(true,firstVersion);Check(!display.NeedsUpdate(2000),"unchanged volume avoids duplicate upload");

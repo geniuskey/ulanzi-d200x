@@ -1,55 +1,59 @@
-﻿# 검증과 배포
+# Testing and distribution
 
-## 자동 검증
+## Automated checks
 
 ```powershell
 .\build.ps1
 .\test.ps1
 ```
 
-빌드는 경고를 오류로 처리합니다. `test.ps1`은 GUI 실행 파일의 종료를 기다리고 실패 코드를 검사합니다. 실행 파일 옆에 결과를 생성합니다.
+Builds treat warnings as errors. `test.ps1` waits for the GUI executable and checks exit codes. Results appear beside the executable.
 
-| 명령 | 결과 파일 | 범위 |
+| Command | Output | Coverage |
 | --- | --- | --- |
-| `--self-test` | `test-results.txt`, `audio-preview.png`, `clock-preview.png`, `layout-*.png` | HID 프레이밍·파싱, URL/설정 검증, ZIP manifest·패킷 경계, 이미지 크기, 볼륨 표시 상태 전이, 파일 교체·백업, 실제 편집 UI의 초안 보존·미리보기·저장·취소·오류 안내·초기화, 기본/1120/1500 너비의 컨트롤 겹침·잘림 |
-| `--render` | `preview.png` | 장치 없이 기본 구성으로 UI 렌더링 |
-| `--audio-test` | `audio-test-results.txt` | 기본 입력/출력 읽기, 테스트 프로세스의 무음 세션 볼륨·음소거 제어와 복원 |
-| `--usage-test` | `usage-test-results.txt` | 실제 CLI 로그인으로 사용량 조회. 계정·네트워크가 필요한 선택 진단 |
-| `--diagnose` | `diagnostics.txt` | 실행 데스크톱, HID 인터페이스, 기본 오디오 장치·현재 앱 상태 |
+| `--self-test` | `test-results.txt`, `audio-preview.png`, `clock-preview.png`, `layout-*.png` | HID framing and parsing, URL/settings validation, ZIP manifests and packet boundaries, image sizes, overlay transitions, atomic saves and backups, editor drafts/previews/save/cancel/errors/reset, and control overlaps/clipping at default, 1120, and 1500 widths |
+| `--render` | `preview.png` | Default UI rendering without a device |
+| `--audio-test` | `audio-test-results.txt` | Default input/output reads; volume and mute control/restoration for the test process's silent session |
+| `--usage-test` | `usage-test-results.txt` | Optional diagnostics with real CLI logins and network access |
+| `--diagnose` | `diagnostics.txt` | Execution desktop, HID interfaces, default audio devices, and foreground app state |
 
-자체 테스트와 렌더링은 USB 장치에 연결하지 않으며 사용자 설정을 저장하지 않습니다. 파일 교체 검증은 임시 디렉터리에서 실행하고 정리합니다. 사용량 자체 검증은 합성 응답으로 Codex·Claude·Gemini 파싱, 사용률 방향, 누락 데이터, 초기화·캐시를 확인합니다. 화면 갱신 검증은 1분·2분 전후 시점을 가정하여 시계·사용량을 번갈아 갱신하고, 매 ZIP에 14개 화면 이미지가 모두 포함되는지와 다른 버튼·최신 시계 이미지가 유지되는지 확인합니다. 네트워크·로그인 정보는 사용하지 않습니다. 렌더링의 앱 예시는 해당 PC의 시작 메뉴에 따라 달라집니다. 오디오 테스트는 출력 장치가 있는 PC에서 별도로 실행하세요. CI에서는 오디오 장치를 가정하지 않습니다.
+Self-tests and rendering do not connect to USB or save user settings. File replacement tests use temporary directories and clean up afterward. Usage tests use synthetic responses to check Codex, Claude, and Gemini parsing, used-percentage direction, missing values, resets, and caching without credentials or network access.
 
-웹 아이콘 검증도 합성 응답을 사용합니다. 리디렉션·상대 아이콘 주소·HTML base 처리, 바로가기 경로·쿼리 제외, ICO 대체, 메모리·디스크 캐시, 사용자 이미지 우선, 잘못된 이미지·오프라인 대체 표시와 재시도 간격을 확인합니다.
+Display refresh tests alternate clock and usage updates around one- and two-minute boundaries. They verify that each ZIP includes all 14 display images and preserves other buttons and the latest clock image. Rendered application examples depend on the machine's Start menu. Run audio tests separately on a PC with an output device; CI does not assume one exists.
 
-GUI 명령을 직접 실행할 때는 완료를 기다려야 결과와 종료 코드를 확인할 수 있습니다.
+Website icon tests use synthetic responses for redirects, relative icons, HTML base URLs, shortcut path/query exclusion, ICO fallback, memory/disk caching, custom-image precedence, invalid/offline fallback, and retry intervals.
+
+Wait for directly invoked GUI diagnostics to finish before inspecting their result:
 
 ```powershell
 $process = Start-Process .\UlanziLite.exe -ArgumentList '--audio-test' -Wait -PassThru
 $process.ExitCode
 ```
 
-## 장치 수동 확인
+## Hardware checks
 
-파일 탐색기에서 앱을 실행하고 Studio를 종료한 상태로 확인합니다.
+Run from File Explorer with Studio fully closed:
 
-- 연결 → 현재 페이지 표시 → USB 분리/재연결 후 페이지 복원.
-- 웹·앱·파일·폴더 버튼 실행, 측면 버튼으로 페이지 이동.
-- 웹 URL 입력 후 사이트 아이콘이 버튼과 미리보기에 나타나는지, 저장 후 장치에도 적용되는지 확인. 사용자 이미지 우선 표시와 앱 재시작·오프라인 캐시도 확인.
-- 각 노브의 좌우 회전과 누르기, 음소거 상태에서 회전 시 음소거 유지.
-- 소리 재생 중인 전면 앱 제어, 설정 창을 열었을 때 마지막 앱 유지, 세션 없는 앱의 대기 표시.
-- 볼륨 표시 시간 경계, 연속 조작 후 시간 연장, 시계 복원, 페이지 전환 중 표시 갱신.
-- 시계를 계속 갱신하고 사용량 조회가 두 번 이상 진행되도록 5분 이상 유지한 뒤 하단 AI 미터 세 개가 유지되는지 확인. 갱신 중 깜박임·입력 지연도 확인.
-- 편집 중 버튼·페이지 이동, 저장/취소, 트레이 숨김/복귀/종료.
-- 100%·150%·200% 화면 배율에서 글자 잘림·스크롤·키보드 초점 확인.
+- Connect, confirm the current page, then unplug/reconnect and check page restoration.
+- Launch websites, apps, files, and folders; switch pages with side buttons.
+- Check automatic website icons in the editor and on the device after saving, custom-image precedence, restart persistence, and offline cache behavior.
+- Turn each knob both ways and press it. Confirm rotation preserves mute.
+- Control a foreground app playing audio; retain it when opening settings; check waiting states without an audio session.
+- Check overlay expiration, extension after repeated input, clock restoration, and updates during page changes.
+- Leave the app running for at least five minutes and two usage queries. Verify all meters remain visible and check for flicker or input delays.
+- Switch buttons/pages while editing; save/cancel; hide, restore, and exit through the tray.
+- Check clipping, scrolling, and keyboard focus at 100%, 150%, and 200% scaling.
 
-자동 검증은 실제 장치 화면·청취 결과나 모든 펌웨어의 호환성을 입증하지 않습니다. 수동 확인 결과는 OS·배율·펌웨어와 함께 기록하세요.
+Automated tests cannot prove physical display appearance, audible results, or compatibility with all firmware. Record manual results with OS, scaling, and firmware versions.
 
-## 로컬 배포 패키지
+## Portable distribution
 
 ```powershell
 .\package.ps1
 ```
 
-`dist/`에 새 실행 파일을 빌드하고 검증한 뒤 버전이 붙은 ZIP과 SHA-256 체크섬을 생성합니다. ZIP에는 실행 파일과 README·사용 문서만 포함하며, `LICENSE`가 있으면 함께 포함합니다. 사용자 설정·백업·로그·진단·테스트 결과는 포함하지 않습니다. 기존 개인 설정과 작업 중인 실행 파일을 교체하지 않습니다.
+This builds and verifies a fresh executable in `dist/`, then creates a versioned ZIP and SHA-256 checksum. The package includes the executable, README, contribution guide, and docs, plus `LICENSE` if present. Personal settings, backups, logs, diagnostics, and test output are excluded. Existing personal settings and the working root executable are not replaced by packaging.
 
-GitHub Actions도 같은 명령을 실행하여 검증 결과와 패키지를 아티팩트로 제공합니다. 릴리스 공개·태그 생성은 자동으로 수행하지 않습니다. 배포 라이선스는 저장소 소유자가 결정해야 합니다.
+The Windows GitHub Actions workflow runs the same command and uploads reports and packages as artifacts. It does not publish releases or create tags. The repository owner determines the distribution license.
+
+To refresh the website screenshot, run `--render` and copy `preview.png` to `docs/screenshot.png`. The separate [Pages workflow](../.github/workflows/pages.yml) publishes `docs/` after a push to `main`; select **GitHub Actions** in repository Pages settings first.

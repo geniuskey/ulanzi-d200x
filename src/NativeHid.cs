@@ -90,12 +90,12 @@ namespace UlanziLite {
                         HidNative.HidD_SetNumInputBuffers(handle,64);
                         current=new FileStream(handle,FileAccess.ReadWrite,candidate.InputLength,true); info=candidate; break;
                     }
-                    if(current==null) throw new IOException("D200X 연결 대기 · Studio가 실행 중이면 종료해 주세요");
-                    stream=current; Report(true,"D200X 연결됨"); var c=Connected; if(c!=null)c();
+                    if(current==null) throw new IOException("Waiting for D200X · Close Ulanzi Studio if running");
+                    stream=current; Report(true,"D200X connected"); var c=Connected; if(c!=null)c();
                     byte[] buf=new byte[info.InputLength];
                     while(!stop.IsCancellationRequested) {
                         int count=await current.ReadAsync(buf,0,buf.Length,stop.Token).ConfigureAwait(false);
-                        if(count==0)throw new IOException("USB 연결이 끊겼습니다");
+                        if(count==0)throw new IOException("USB disconnected");
                         int index,state; if(Protocol.Parse(buf,count,out index,out state)) { var h=Input; if(h!=null)h(index,state); }
                     }
                 } catch(Exception ex) { if(!stop.IsCancellationRequested) Report(false,ex.Message); }
@@ -107,14 +107,14 @@ namespace UlanziLite {
             byte[] report=new byte[info.OutputLength]; int offset=report.Length>1024 ? 1 : 0;
             Buffer.BlockCopy(packet,0,report,offset,1024);
             var pending=target.WriteAsync(report,0,report.Length,stop.Token);
-            if(await Task.WhenAny(pending,Task.Delay(3000)).ConfigureAwait(false)!=pending) { target.Dispose(); throw new IOException("USB 쓰기 시간 초과"); }
+            if(await Task.WhenAny(pending,Task.Delay(3000)).ConfigureAwait(false)!=pending) { target.Dispose(); throw new IOException("USB write timed out"); }
             await pending.ConfigureAwait(false);
         }
         public async Task Send(int command, byte[] payload, bool bundle) {
             await writer.WaitAsync().ConfigureAwait(false);
             FileStream target=stream;
             try {
-                if(target==null)throw new IOException("D200X가 연결되어 있지 않습니다");
+                if(target==null)throw new IOException("D200X is not connected");
                 byte[] first=new byte[Math.Min(1016,payload.Length)]; Buffer.BlockCopy(payload,0,first,0,first.Length);
                 await Write(target,Protocol.Packet(command,first,payload.Length)).ConfigureAwait(false);
                 if(bundle)for(int pos=1016;pos<payload.Length;pos+=1024) {

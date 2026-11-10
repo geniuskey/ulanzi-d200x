@@ -40,11 +40,11 @@ namespace UlanziLite {
             string startupProblem=RuntimeContext.StartupProblem();
             if(startupProblem!=null){Log(startupProblem+" "+RuntimeContext.Describe());return 2;}
             bool first;using(var mutex=new Mutex(true,"Local\\Geniuskey.UlanziLite.D200X",out first)) {
-                if(!first){MessageBox.Show("이미 실행 중입니다. 작업 표시줄 트레이의 Ulanzi Lite를 열어 주세요.","Ulanzi Lite");return 0;}
+                if(!first){MessageBox.Show("Already running. Open Ulanzi Lite from the system tray.","Ulanzi Lite");return 0;}
                 Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);
                 Application.ThreadException+=(s,e)=>{Log(e.Exception.ToString());MessageBox.Show(e.Exception.Message,"Ulanzi Lite");};
                 try {Log("Starting interactive controller. "+RuntimeContext.Describe());var configuration=Configuration.Load();Application.Run(new MainForm(configuration));return 0;}
-                catch(Exception ex){Log(ex.ToString());MessageBox.Show(ex.Message+"\n설정 파일은 그대로 보존됩니다. ulanzi-lite.log를 확인해 주세요.","Ulanzi Lite 시작 실패");return 1;}
+                catch(Exception ex){Log(ex.ToString());MessageBox.Show(ex.Message+"\nYour settings are preserved. Check ulanzi-lite.log.","Ulanzi Lite startup failed");return 1;}
             }
         }
     }

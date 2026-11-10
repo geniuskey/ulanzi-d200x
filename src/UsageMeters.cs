@@ -19,11 +19,11 @@ namespace UlanziLite {
                 && time.UtcDateTime<=now.AddMinutes(1) && now-time.UtcDateTime<TimeSpan.FromMinutes(15);
         }
         public void Validate() {
-            if(Array.IndexOf(UsageMeters.Providers,Provider)<0)throw new ArgumentException("알 수 없는 사용량 서비스입니다.");
+            if(Array.IndexOf(UsageMeters.Providers,Provider)<0)throw new ArgumentException("Unknown usage provider.");
             foreach(var value in new[]{SessionUsed,WeeklyUsed})
-                if(value.HasValue && (Double.IsNaN(value.Value) || Double.IsInfinity(value.Value) || value<0 || value>100))throw new ArgumentException("사용률은 0~100%여야 합니다.");
+                if(value.HasValue && (Double.IsNaN(value.Value) || Double.IsInfinity(value.Value) || value<0 || value>100))throw new ArgumentException("Usage must be between 0 and 100%.");
             DateTimeOffset time;
-            if(!DateTimeOffset.TryParse(ObservedAt,CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal,out time) || time.UtcDateTime>DateTime.UtcNow.AddMinutes(1))throw new ArgumentException("사용량 확인 시간이 올바르지 않습니다.");
+            if(!DateTimeOffset.TryParse(ObservedAt,CultureInfo.InvariantCulture,DateTimeStyles.AssumeUniversal,out time) || time.UtcDateTime>DateTime.UtcNow.AddMinutes(1))throw new ArgumentException("Invalid usage observation time.");
         }
     }
     public static class UsageMeters {
@@ -33,7 +33,7 @@ namespace UlanziLite {
         static readonly Color[] Accents={Color.FromArgb(115,221,185),Color.FromArgb(229,170,131),Color.FromArgb(139,178,255)};
         static readonly object gate=new object();
         static readonly Dictionary<string,UsageReading> readings=new Dictionary<string,UsageReading>();
-        static readonly string[] statuses={"CLI 연결 대기","CLI 연결 대기","CLI 연결 대기"};
+        static readonly string[] statuses={"Waiting for CLI","Waiting for CLI","Waiting for CLI"};
         static int revision;
         public static int Revision {get{lock(gate)return revision;}}
         public static UsageReading Get(int index) {
@@ -50,7 +50,7 @@ namespace UlanziLite {
                 readings[value.Provider]=Clone(value);revision++;
             }
         }
-        public static KeyBinding Binding(int index) {return new KeyBinding {Label=Names[index]+" 사용량",Target=Urls[index]};}
+        public static KeyBinding Binding(int index) {return new KeyBinding {Label=Names[index]+" usage",Target=Urls[index]};}
         public static Bitmap Render(int index) {return Render(index,Get(index),DateTime.UtcNow);}
         public static Bitmap Render(int index,UsageReading reading,DateTime now) {
             var bitmap=new Bitmap(196,196,PixelFormat.Format24bppRgb);
@@ -64,10 +64,10 @@ namespace UlanziLite {
                 bool fresh=reading!=null && reading.IsFresh(now);
                 double? first=reading!=null && UsageReading.WindowActive(reading.SessionResetAt,now)?reading.SessionUsed:null;
                 double? second=reading!=null && UsageReading.WindowActive(reading.WeeklyResetAt,now)?reading.WeeklyUsed:null;
-                DrawWindow(g,label,number,index==2?"Pro":"5시간",first,49,fresh?Accents[index]:Color.FromArgb(117,133,153));
-                DrawWindow(g,label,number,index==2?"Flash":"주간",second,104,fresh?Accents[index]:Color.FromArgb(117,133,153));
+                DrawWindow(g,label,number,index==2?"Pro":"5-hour",first,49,fresh?Accents[index]:Color.FromArgb(117,133,153));
+                DrawWindow(g,label,number,index==2?"Flash":"Weekly",second,104,fresh?Accents[index]:Color.FromArgb(117,133,153));
                 string status=Status(index);
-                string note=reading==null?status:!fresh?"캐시 · "+DateTimeOffset.Parse(reading.ObservedAt,CultureInfo.InvariantCulture).ToLocalTime().ToString("HH:mm"):!first.HasValue && !second.HasValue?"갱신 대기":(index==0?"Codex":index==1?"Claude":"CLI")+" · "+DateTimeOffset.Parse(reading.ObservedAt,CultureInfo.InvariantCulture).ToLocalTime().ToString("HH:mm");
+                string note=reading==null?status:!fresh?"Cached · "+DateTimeOffset.Parse(reading.ObservedAt,CultureInfo.InvariantCulture).ToLocalTime().ToString("HH:mm"):!first.HasValue && !second.HasValue?"Awaiting update":(index==0?"Codex":index==1?"Claude":"CLI")+" · "+DateTimeOffset.Parse(reading.ObservedAt,CultureInfo.InvariantCulture).ToLocalTime().ToString("HH:mm");
                 using(var brush=new SolidBrush(Color.FromArgb(155,172,192)))
                 using(var format=new StringFormat {Alignment=StringAlignment.Center,FormatFlags=StringFormatFlags.NoWrap,Trimming=StringTrimming.EllipsisCharacter})
                     g.DrawString(note,label,brush,new RectangleF(6,163,184,22),format);

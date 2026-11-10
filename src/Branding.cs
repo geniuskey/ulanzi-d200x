@@ -11,7 +11,7 @@ using System.Linq;
 
 namespace UlanziLite {
     static class Typography {
-        public static readonly string UiFontName=Choose("Noto Sans KR","Malgun Gothic");
+        public static readonly string UiFontName=Choose("Segoe UI","Arial");
         public static readonly string NumberFontName=Choose("Bahnschrift","Segoe UI");
         static string Choose(string preferred,string fallback) {
             return FontFamily.Families.Any(f=>String.Equals(f.Name,preferred,StringComparison.OrdinalIgnoreCase))?preferred:fallback;
