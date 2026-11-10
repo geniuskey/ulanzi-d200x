@@ -1,0 +1,117 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Web.Script.Serialization;
+
+namespace UlanziLite {
+    public class KeyBinding {
+        public string Label="빈 버튼", Kind="website", Target="", Image="", Color="#273349";
+        public void Validate() {
+            if(String.IsNullOrWhiteSpace(Target))return;
+            if(Kind=="website") { Uri uri; if(!Uri.TryCreate(Target,UriKind.Absolute,out uri) || (uri.Scheme!="https" && uri.Scheme!="http") || String.IsNullOrEmpty(uri.Host))throw new ArgumentException("http:// 또는 https:// 주소를 입력해 주세요."); }
+            else if(Kind=="application") { if(!File.Exists(Target) && !Directory.Exists(Target))throw new ArgumentException("앱 또는 파일 경로를 찾을 수 없습니다."); }
+            else throw new ArgumentException("지원하지 않는 버튼 종류입니다.");
+            if(Label.Length>40)throw new ArgumentException("이름은 40자까지 입력해 주세요.");
+            System.Drawing.ColorTranslator.FromHtml(Color);
+            if(!String.IsNullOrWhiteSpace(Image))using(var img=System.Drawing.Image.FromFile(Image)) { }
+        }
+        public void Launch() { Validate(); if(!String.IsNullOrWhiteSpace(Target))Process.Start(new ProcessStartInfo(Target) {UseShellExecute=true}); }
+    }
+    public class DeckPage { public string Name; public List<KeyBinding> Keys=new List<KeyBinding>(); }
+    public class Configuration {
+        public int Version=1, Step=2, Brightness=65, Page=0, OverlaySeconds=3;
+        public List<DeckPage> Pages=new List<DeckPage>();
+        public static readonly string PathName=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"settings.json");
+        public static readonly JavaScriptSerializer Json=new JavaScriptSerializer();
+        public static List<string> InstalledApps() {
+            var result=new List<string>();
+            var folders=new[]{Environment.GetFolderPath(Environment.SpecialFolder.StartMenu),Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),Path.Combine(Environment.GetEnvironmentVariable("APPDATA")??"","Microsoft","Windows","Start Menu"),Path.Combine(Environment.GetEnvironmentVariable("PROGRAMDATA")??"C:\\ProgramData","Microsoft","Windows","Start Menu")};
+            foreach(string folder in folders.Distinct(StringComparer.OrdinalIgnoreCase)) {
+                if(String.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))continue;
+                ScanApps(folder,result);
+            }
+            return result.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(System.IO.Path.GetFileNameWithoutExtension).ToList();
+        }
+        static void ScanApps(string folder,List<string> result) {
+            try { result.AddRange(Directory.GetFiles(folder,"*.lnk",SearchOption.TopDirectoryOnly)); }catch(UnauthorizedAccessException) { }catch(IOException) { }
+            string[] children;try{children=Directory.GetDirectories(folder);}catch(UnauthorizedAccessException){return;}catch(IOException){return;}
+            foreach(string child in children)ScanApps(child,result);
+        }
+        public static Configuration Defaults() {
+            var config=new Configuration();
+            for(int p=0;p<3;p++) { var page=new DeckPage {Name=new[]{"자주 쓰는 것","작업","미디어"}[p]}; for(int i=0;i<13;i++)page.Keys.Add(new KeyBinding()); config.Pages.Add(page); }
+            var apps=InstalledApps(); string[] names={"Google Chrome","Notion","Discord","Visual Studio 2022","Obsidian","File Explorer"};
+            string[] colors={"#264E69","#353742","#47488D","#5A3A83","#514079","#71602C"};
+            for(int i=0;i<names.Length;i++) { string path=apps.FirstOrDefault(a=>String.Equals(System.IO.Path.GetFileNameWithoutExtension(a),names[i],StringComparison.OrdinalIgnoreCase)); if(path!=null)config.Pages[0].Keys[i]=new KeyBinding {Label=names[i],Kind="application",Target=path,Color=colors[i]}; }
+            string[] labels={"ChatGPT","GitHub","YouTube","Gmail"}; string[] urls={"https://chatgpt.com","https://github.com","https://youtube.com","https://mail.google.com"};
+            for(int i=0;i<4;i++)config.Pages[0].Keys[i+6]=new KeyBinding {Label=labels[i],Target=urls[i],Color=new[]{"#23574C","#363C4D","#743A46","#6C4835"}[i]};
+            return config;
+        }
+        public static Configuration Load() {
+            if(!File.Exists(PathName))return Defaults();
+            var c=Json.Deserialize<Configuration>(File.ReadAllText(PathName,Encoding.UTF8));
+            if(c==null || c.Version!=1 || c.Pages==null || c.Pages.Count==0 || c.Pages.Count>20)throw new InvalidDataException("설정 파일 형식이 올바르지 않습니다.");
+            foreach(var p in c.Pages) { if(p==null || p.Keys==null || p.Keys.Count!=13 || p.Keys.Any(k=>k==null))throw new InvalidDataException("페이지에 버튼 13개가 필요합니다."); foreach(var k in p.Keys) { k.Label=k.Label??""; k.Target=k.Target??""; k.Image=k.Image??""; if(k.Color==null)k.Color="#273349"; } }
+            c.Page=Math.Max(0,Math.Min(c.Pages.Count-1,c.Page)); c.Step=Math.Max(1,Math.Min(10,c.Step)); c.Brightness=Math.Max(0,Math.Min(100,c.Brightness));c.OverlaySeconds=Math.Max(1,Math.Min(30,c.OverlaySeconds)); return c;
+        }
+        public void Save() {
+            string temp=PathName+".tmp"; File.WriteAllText(temp,Json.Serialize(this),new UTF8Encoding(false));
+            if(File.Exists(PathName))File.Replace(temp,PathName,PathName+".bak"); else File.Move(temp,PathName);
+        }
+    }
+    public static class Artwork {
+        public static Bitmap Render(KeyBinding key) {
+            var bitmap=new Bitmap(196,196,PixelFormat.Format24bppRgb);
+            using(var g=Graphics.FromImage(bitmap)) {
+                g.SmoothingMode=SmoothingMode.AntiAlias; g.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                Color color; try {color=ColorTranslator.FromHtml(key.Color);}catch {color=Color.FromArgb(39,51,73);}
+                g.Clear(color);
+                bool drawn=false;
+                if(!String.IsNullOrWhiteSpace(key.Image))try {using(var img=System.Drawing.Image.FromFile(key.Image)) {g.DrawImage(img,new Rectangle(50,25,96,96)); drawn=true;}}catch { }
+                if(!drawn && key.Kind=="application" && File.Exists(key.Target))try {using(var icon=Icon.ExtractAssociatedIcon(key.Target))if(icon!=null) { g.DrawIcon(icon,new Rectangle(58,30,80,80)); drawn=true; }}catch { }
+                if(!drawn)using(var font=new Font("Segoe UI",46,FontStyle.Bold)) {
+                    string mark=String.IsNullOrWhiteSpace(key.Target)?"+":(String.IsNullOrWhiteSpace(key.Label)?"?":System.Globalization.StringInfo.GetNextTextElement(key.Label));
+                    g.DrawString(mark,font,Brushes.White,new RectangleF(0,17,196,105),new StringFormat {Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center});
+                }
+                using(var font=new Font("Malgun Gothic",17,FontStyle.Bold))g.DrawString(key.Label??"",font,Brushes.White,new RectangleF(10,125,176,65),new StringFormat {Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter});
+            } return bitmap;
+        }
+        public static byte[] Bundle(DeckPage page,byte[] wideImage=null) {
+            var icons=new Dictionary<int,byte[]>();
+            for(int i=0;i<14;i++) {if(i==13 && wideImage!=null){icons[i]=wideImage;continue;}using(var image=i==13?new Bitmap(196,196):Render(page.Keys[i]))using(var ms=new MemoryStream()) {image.Save(ms,ImageFormat.Png);icons[i]=ms.ToArray();}}
+            return BundleForIcons(icons);
+        }
+        public static byte[] WideBundle(byte[] png) {return BundleForIcons(new Dictionary<int,byte[]> {{13,png}});}
+        static byte[] BundleForIcons(Dictionary<int,byte[]> icons) {
+            var files=new Dictionary<string,byte[]>(); var manifest=new Dictionary<string,object>();
+            using(var sha=SHA256.Create())foreach(var icon in icons) {
+                int i=icon.Key;byte[] png=icon.Value;
+                string name="icons/"+BitConverter.ToString(sha.ComputeHash(png)).Replace("-","").Substring(0,20)+".png"; files[name]=png;
+                manifest[(i%5)+"_"+(i/5)]=new {State=0,ViewParam=new[]{new {Text="",Icon=name}}};
+            }
+            byte[] json=Encoding.UTF8.GetBytes(Configuration.Json.Serialize(manifest));
+            var random=new Random();
+            for(int attempt=0;attempt<256;attempt++) {
+                using(var memory=new MemoryStream()) {
+                    using(var zip=new ZipArchive(memory,ZipArchiveMode.Create,true)) {
+                        byte[] padding=new byte[16+attempt*11]; random.NextBytes(padding); WriteEntry(zip,"padding.bin",padding);
+                        foreach(var file in files)WriteEntry(zip,file.Key,file.Value); WriteEntry(zip,"manifest.json",json);
+                    }
+                    byte[] data=memory.ToArray(); bool clean=true;
+                    for(int pos=1016;pos<data.Length;pos+=1024)if(data[pos]==0 || data[pos]==0x7c) {clean=false;break;}
+                    if(clean)return data;
+                }
+            }
+            throw new IOException("장치용 이미지 묶음을 만들지 못했습니다. 다시 저장해 주세요.");
+        }
+        static void WriteEntry(ZipArchive zip,string name,byte[] bytes) {var entry=zip.CreateEntry(name,CompressionLevel.Optimal); using(var s=entry.Open())s.Write(bytes,0,bytes.Length);}
+    }
+}
