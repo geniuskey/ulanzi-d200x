@@ -31,7 +31,7 @@ The layout provides **10 editable buttons across three pages**, plus three fixed
 | Open app / file / folder | Full path to an executable, Start menu shortcut, file, or folder |
 | Empty button | Leave the URL or path blank |
 
-Labels support up to 40 characters. Choose a PNG, JPG, or BMP icon; the app references the original image file, so keep it in place. Default shortcuts are editable examples. Existing personal labels and paths are preserved; new defaults and the interface are English.
+Labels support up to 40 characters. The installed-app picker shows app icons beside their names, including the selected app. Choose a PNG, JPG, or BMP icon; the app references the original image file, so keep it in place. Default shortcuts are editable examples. Existing personal labels and paths are preserved; new defaults and the interface are English.
 
 Website shortcuts fetch their icons automatically. Custom images take priority; unavailable icons fall back to the first character of the label. Downloads run in the background and are cached in `website-icons/` beside the executable. Only the site's home page and icon URLs are requested; the shortcut's path and query are excluded.
 

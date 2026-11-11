@@ -142,11 +142,12 @@ namespace UlanziLite {
         static System.Collections.Generic.IEnumerable<Control> Descendants(Control parent) {
             foreach(Control control in parent.Controls){yield return control;foreach(var child in Descendants(control))yield return child;}
         }
+        static bool IsInteractive(Control c) {return c is Button || c is TextBox || c is ComboBox || c is SegmentedControl || c is Stepper || c is Slider;}
         static void CheckEditorLayout(Form form,string name) {
-            foreach(var input in Descendants(form).Where(c=>c is Button || c is TextBox || c is ComboBox || c is NumericUpDown)) {
+            foreach(var input in Descendants(form).Where(c=>IsInteractive(c))) {
                 if(!input.Parent.ClientRectangle.Contains(input.Bounds))throw new Exception(name+": clipped "+input.AccessibleName);
                 foreach(Control other in input.Parent.Controls)
-                    if(other!=input && (other is Button || other is TextBox || other is ComboBox || other is NumericUpDown) && input.Bounds.IntersectsWith(other.Bounds))throw new Exception(name+": overlapping "+input.AccessibleName);
+                    if(other!=input && IsInteractive(other) && input.Bounds.IntersectsWith(other.Bounds))throw new Exception(name+": overlapping "+input.AccessibleName);
             }
             Check(true,name);
         }
@@ -166,7 +167,7 @@ namespace UlanziLite {
                     using(var bitmap=new System.Drawing.Bitmap(form.Width,form.Height)){form.DrawToBitmap(bitmap,new System.Drawing.Rectangle(0,0,form.Width,form.Height));bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layout-"+width+".png"));}
                 }
                 form.ClientSize=new System.Drawing.Size(1180,860);Application.DoEvents();
-                var kind=Descendants(form).OfType<ComboBox>().Single(c=>c.AccessibleName=="Button action");
+                var kind=Descendants(form).OfType<SegmentedControl>().Single(c=>c.AccessibleName=="Button action");
                 kind.SelectedIndex=0;
                 Check(!buttons.Single(c=>c.AccessibleName=="Browse file").Enabled && !buttons.Single(c=>c.AccessibleName=="Browse folder").Enabled,"website action disables irrelevant file browsing");
                 kind.SelectedIndex=1;
@@ -185,7 +186,7 @@ namespace UlanziLite {
                 buttons.Single(c=>c.AccessibleName=="Save and apply to device").PerformClick();
                 Check(config.Pages[0].Keys[0].Label=="Draft retained" && !form.Text.Contains("Editing"),"save commits selected draft and clears dirty state");
                 var target=Descendants(form).OfType<TextBox>().Single(c=>c.AccessibleName=="URL or launch path");
-                Descendants(form).OfType<ComboBox>().Single(c=>c.AccessibleName=="Button action").SelectedIndex=0;
+                Descendants(form).OfType<SegmentedControl>().Single(c=>c.AccessibleName=="Button action").SelectedIndex=0;
                 target.Text="javascript:alert(1)";
                 string savedTarget=config.Pages[0].Keys[0].Target;
                 buttons.Single(c=>c.AccessibleName=="Save and apply to device").PerformClick();

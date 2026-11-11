@@ -35,6 +35,7 @@ namespace UlanziLite {
                     File.WriteAllText(path,result.ToString(),Encoding.UTF8);return 0;
                 }catch(Exception ex){File.WriteAllText(path,ex.ToString());return 1;}
             }
+            if(args.Contains("--preview")){Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);var form=new MainForm(Configuration.Defaults(),true);form.FormClosed+=(s,e)=>Application.ExitThread();form.FormClosing+=(s,e)=>e.Cancel=false;Application.Run(form);return 0;}
             if(args.Contains("--self-test"))return SelfTest.Run();
             if(args.Contains("--audio-test"))return AudioSmokeTest.Run();
             string startupProblem=RuntimeContext.StartupProblem();
