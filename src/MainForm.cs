@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -33,12 +33,14 @@ namespace UlanziLite {
         readonly Artwork.DisplayImages displayImages=new Artwork.DisplayImages();
         bool updatingWide,updatingUsage;int usageRevision=-1;long usageMinute=-1;long nextWideAttempt;
         bool updatingWebsiteIcons;long websiteEditAt;
+        readonly ThemeButton[] deviceKnobs=new ThemeButton[3];Card deviceControls;
+        SegmentedControl workspaceTabs,editorTabs;bool compactLayout;
         public MainForm(Configuration configuration) : this(configuration,false) { }
         public MainForm(Configuration configuration,bool preview) {
             previewMode=preview;config=configuration;wideState.HoldMilliseconds=config.OverlaySeconds*1000;
             using(var g=CreateGraphics())Theme.Scale=Math.Max(1f,g.DpiX/96f);
             Text=WindowTitle;BackColor=Theme.Background;ForeColor=Theme.Text;Font=new Font(Typography.UiFontName,9);AutoScaleMode=AutoScaleMode.None;
-            ClientSize=new Size(S(1200),S(860));MinimumSize=new Size(S(920),S(700));AutoScroll=true;
+            ClientSize=new Size(S(1200),S(860));MinimumSize=new Size(S(800),S(600));AutoScroll=false;
             DoubleBuffered=true;Icon=Branding.CreateIcon();StartPosition=FormStartPosition.CenterScreen;
             BuildUI(); if(!preview)BuildTray(); PaintKeys(); LoadKey();
             label.TextChanged+=(s,e)=>EditorChanged();target.TextChanged+=(s,e)=>EditorChanged();image.TextChanged+=(s,e)=>EditorChanged();kind.SelectedIndexChanged+=(s,e)=>EditorChanged();
@@ -78,6 +80,10 @@ namespace UlanziLite {
             SuspendLayout();
             canvas=new Panel {Location=Point.Empty,BackColor=Theme.Background};Controls.Add(canvas);
             BuildHeader();BuildDeck();BuildAudio();BuildEditor();
+            workspaceTabs=new SegmentedControl("Deck","Audio") {AccessibleName="Workspace view"};canvas.Controls.Add(workspaceTabs);
+            workspaceTabs.SelectedIndexChanged+=(s,e)=>DoLayout();
+            editorTabs=new SegmentedControl("Action","Icon / apps") {AccessibleName="Editor view"};editorPanel.Controls.Add(editorTabs);
+            editorTabs.SelectedIndexChanged+=(s,e)=>LayoutEditor();
             statusBar=new Panel {BackColor=Theme.Surface};canvas.Controls.Add(statusBar);
             statusBar.Paint+=(s,e)=>{using(var pen=new Pen(Theme.Border))e.Graphics.DrawLine(pen,0,0,statusBar.Width,0);};
             feedback=TextAt(statusBar,"Select a key, edit its action, then save to apply it to the device.",9,Theme.Muted);
@@ -99,6 +105,7 @@ namespace UlanziLite {
             tips.SetToolTip(brightness,"Device brightness");tips.SetToolTip(brightnessIcon,"Device brightness");
             dataButton=ButtonAt(canvas,"Data folder",Theme.Folder,ButtonKind.Ghost,()=>{try{Process.Start(new ProcessStartInfo(AppDomain.CurrentDomain.BaseDirectory){UseShellExecute=true});}catch(Exception ex){Feedback(ex.Message,true);}});
             guideButton=ButtonAt(canvas,"Guide",Theme.Help,ButtonKind.Ghost,ShowGuide,"Quick guide");
+            tips.SetToolTip(dataButton,"Open data folder");tips.SetToolTip(guideButton,"Quick guide");
             headerRule=Rule(canvas);
         }
         void BuildDeck() {
@@ -111,7 +118,15 @@ namespace UlanziLite {
             pages.SelectedIndexChanged+=async(s,e)=>{config.Page=pages.SelectedIndex;PaintKeys();LoadKey();try{SaveConfiguration();await SyncDeck();}catch(Exception ex){Feedback(ex.Message,true);}};
             nextPage=ButtonAt(deckPanel,"",Theme.ChevronRight,ButtonKind.Secondary,()=>ChangePage(1),"Next page");
             tips.SetToolTip(previousPage,"Previous page");tips.SetToolTip(nextPage,"Next page");
-            bezel=new Card {BackColor=Theme.Background,BorderColor=Theme.Border,Radius=S(20)};deckPanel.Controls.Add(bezel);
+            bezel=new Card {BackColor=Theme.Surface,Flat=true,AccessibleName="D200X device preview"};deckPanel.Controls.Add(bezel);
+            deviceControls=new Card {BackColor=Theme.Surface,Flat=true};bezel.Controls.Add(deviceControls);
+            deviceControls.Controls.Add(previousPage);deviceControls.Controls.Add(nextPage);
+            for(int i=0;i<3;i++) {
+                int knob=i;
+                deviceKnobs[i]=ButtonAt(deviceControls,"",i==0?Theme.Microphone:i==1?Theme.App:Theme.Volume,ButtonKind.Secondary,()=>ControlAudio(knob,0,true),new[]{"Device microphone dial","Device active app dial","Device master output dial"}[i]);
+                deviceKnobs[i].MouseWheel+=(s,e)=>{if(e.Delta!=0)ControlAudio(knob,Math.Sign(e.Delta)*config.Step,false);};
+                tips.SetToolTip(deviceKnobs[i],"Scroll to adjust volume · Click to mute");
+            }
             for(int i=0;i<13;i++) {
                 int k=i;var b=new KeyButton {TabStop=true,AccessibleName="Button "+(i+1)};bezel.Controls.Add(b);keys[i]=b;
                 b.Click+=(s,e)=>{if(k>=10){TryLaunch(UsageMeters.Binding(k-10));return;}selected=k;PaintSelection();LoadKey();};
@@ -178,25 +193,45 @@ namespace UlanziLite {
 
         void ResizeCanvas() {
             if(canvas==null)return;
-            var size=new Size(Math.Max(ClientSize.Width,S(1100)),Math.Max(ClientSize.Height,S(800)));
-            AutoScrollMinSize=size.Width>ClientSize.Width || size.Height>ClientSize.Height?size:Size.Empty;
-            canvas.Bounds=new Rectangle(AutoScrollPosition,size);
+            AutoScrollMinSize=Size.Empty;
+            canvas.Bounds=new Rectangle(Point.Empty,ClientSize);
+            DoLayout();
         }
         void DoLayout() {
             if(canvas==null || statusBar==null)return;
-            int width=canvas.ClientSize.Width,height=canvas.ClientSize.Height,pad=S(24),gap=S(16);
+            int width=canvas.ClientSize.Width,height=canvas.ClientSize.Height;
+            compactLayout=width<S(1100) || height<S(800);
+            int pad=S(compactLayout?12:24),gap=S(compactLayout?12:16),headerHeight=S(compactLayout?64:76),footerHeight=S(compactLayout?28:36);
             LayoutHeader();
-            headerRule.Bounds=new Rectangle(0,S(76),width,1);
-            statusBar.Bounds=new Rectangle(0,height-S(36),width,S(36));
-            feedback.Bounds=new Rectangle(pad,1,width-pad*2-S(340),S(35));shortcuts.Bounds=new Rectangle(width-pad-S(330),1,S(330),S(35));
-            int top=S(76)+gap,bottom=height-S(36)-gap,editorWidth=S(360),leftWidth=width-pad*2-gap-editorWidth,audioHeight=S(202);
+            headerRule.Bounds=new Rectangle(0,headerHeight,width,1);
+            statusBar.Bounds=new Rectangle(0,height-footerHeight,width,footerHeight);
+            shortcuts.Visible=!compactLayout;
+            feedback.Bounds=new Rectangle(pad,1,width-pad*2-(compactLayout?0:S(340)),footerHeight-1);shortcuts.Bounds=new Rectangle(width-pad-S(330),1,S(330),footerHeight-1);
+            int top=headerHeight+gap,bottom=height-footerHeight-gap,editorWidth=S(compactLayout?340:360),leftWidth=width-pad*2-gap-editorWidth,audioHeight=S(202);
             editorPanel.Bounds=new Rectangle(width-pad-editorWidth,top,editorWidth,bottom-top);
-            audioPanel.Bounds=new Rectangle(pad,bottom-audioHeight,leftWidth,audioHeight);
-            deckPanel.Bounds=new Rectangle(pad,top,leftWidth,bottom-audioHeight-gap-top);
+            workspaceTabs.Visible=compactLayout;
+            if(compactLayout) {
+                workspaceTabs.Bounds=new Rectangle(pad,top,leftWidth,S(34));
+                deckPanel.Bounds=audioPanel.Bounds=new Rectangle(pad,top+S(42),leftWidth,bottom-top-S(42));
+                deckPanel.Visible=workspaceTabs.SelectedIndex==0;audioPanel.Visible=!deckPanel.Visible;
+            }else {
+                deckPanel.Visible=audioPanel.Visible=true;
+                audioPanel.Bounds=new Rectangle(pad,bottom-audioHeight,leftWidth,audioHeight);
+                deckPanel.Bounds=new Rectangle(pad,top,leftWidth,bottom-audioHeight-gap-top);
+            }
             LayoutDeck();LayoutAudio();LayoutEditor();
         }
         void LayoutHeader() {
             if(canvas==null)return;
+            if(compactLayout) {
+                int w=canvas.ClientSize.Width,cx=w-S(12),cy=S(15),hh=S(32);
+                appMark.Bounds=new Rectangle(S(12),S(17),S(30),S(30));appTitle.Bounds=new Rectangle(S(50),cy,S(120),hh);appSubtitle.Visible=false;
+                guideButton.Text=dataButton.Text="";
+                guideButton.Bounds=new Rectangle(cx-=S(32),cy,S(32),hh);dataButton.Bounds=new Rectangle(cx-=S(36),cy,S(32),hh);
+                brightnessValue.Bounds=new Rectangle(cx-=S(42),cy,S(38),hh);brightness.Bounds=new Rectangle(cx-=S(100),cy,S(96),hh);brightnessIcon.Bounds=new Rectangle(cx-=S(28),cy,S(24),hh);
+                status.Bounds=new Rectangle(S(180),cy,Math.Max(S(80),Math.Min(status.PreferredWidth(),cx-S(192))),hh);return;
+            }
+            appSubtitle.Visible=true;guideButton.Text="Guide";dataButton.Text="Data folder";
             int width=canvas.ClientSize.Width,pad=S(24),y=S(21),h=S(34);
             appMark.Bounds=new Rectangle(pad,S(20),S(36),S(36));
             appTitle.Bounds=new Rectangle(pad+S(48),S(14),S(280),S(30));appSubtitle.Bounds=new Rectangle(pad+S(49),S(42),S(300),S(20));
@@ -210,22 +245,44 @@ namespace UlanziLite {
         }
         void LayoutDeck() {
             int w=deckPanel.Width,h=deckPanel.Height,y=S(20),hh=S(34);
-            deckTitle.Bounds=new Rectangle(S(20),S(14),S(200),S(30));
+            deckTitle.Bounds=new Rectangle(S(20),S(14),S(compactLayout?80:200),S(30));
             int x=w-S(20);
-            nextPage.Bounds=new Rectangle(x-=hh,y,hh,hh);
-            pages.Width=S(180);pages.Location=new Point(x-=S(6)+pages.Width,y+(hh-pages.Height)/2);
-            previousPage.Bounds=new Rectangle(x-=S(6)+hh,y,hh,hh);
+            pages.Width=S(180);pages.Location=new Point(x-=pages.Width,y+(hh-pages.Height)/2);
             pagePosition.Bounds=new Rectangle(x-=S(8)+S(52),y,S(52),hh);
             deckSubtitle.Bounds=new Rectangle(S(20),S(44),Math.Max(0,x-S(36)),S(22));
-            int availableWidth=w-S(40),availableHeight=h-S(80)-S(20),inner=S(14);
-            int cell=Math.Max(S(40),Math.Min((availableWidth-inner*2)/5,(availableHeight-inner*2)/3));
-            int bw=cell*5+inner*2,bh=cell*3+inner*2;
-            bezel.Bounds=new Rectangle((w-bw)/2,S(80)+Math.Max(0,(availableHeight-bh)/2),bw,bh);
-            for(int i=0;i<13;i++){int column=i<10?i%5:i-10,row=i<10?i/5:2;keys[i].Bounds=new Rectangle(inner+column*cell,inner+row*cell,cell,cell);}
-            int inset=S(4);widePreview.Bounds=new Rectangle(inner+3*cell+inset,inner+2*cell+inset,2*cell-inset*2,cell-inset*2);
+            deckSubtitle.Visible=!compactLayout;
+            // Crop to the screen grid; preserve the reference's 52px screens,
+            // 66px pitch and 30/42px navigation-button/dial proportions.
+            int gridTop=S(compactLayout?60:80);
+            int availableWidth=w-S(40),availableHeight=h-gridTop-S(20);
+            float scale=Math.Min(availableWidth/324f,availableHeight/244f);
+            int bw=(int)Math.Round(324*scale),bh=(int)Math.Round(244*scale);
+            bezel.Bounds=new Rectangle((w-bw)/2,gridTop+Math.Max(0,(availableHeight-bh)/2),bw,bh);
+            for(int i=0;i<13;i++){int column=i%5,row=i/5;keys[i].ImageInset=(int)Math.Round(4*scale);keys[i].ImageRadius=(int)Math.Round(5*scale);keys[i].Bounds=DeviceRect(scale,column*66,row*66,60,60);}
+            widePreview.Bounds=DeviceRect(scale,202,136,118,52);widePreview.Radius=(int)Math.Round(5*scale);
+            deviceControls.Bounds=DeviceRect(scale,0,200,324,44);
+            previousPage.Bounds=DeviceRect(scale,15,7,30,30);nextPage.Bounds=DeviceRect(scale,81,7,30,30);
+            previousPage.Radius=previousPage.Width/2;nextPage.Radius=nextPage.Width/2;
+            for(int i=0;i<3;i++){deviceKnobs[i].Bounds=DeviceRect(scale,141+i*66,1,42,42);deviceKnobs[i].Radius=deviceKnobs[i].Width/2;}
+            bezel.Invalidate();
         }
+        static Rectangle DeviceRect(float scale,int x,int y,int width,int height) {return Rectangle.FromLTRB((int)Math.Round(x*scale),(int)Math.Round(y*scale),(int)Math.Round((x+width)*scale),(int)Math.Round((y+height)*scale));}
         void LayoutAudio() {
             int w=audioPanel.Width,y=S(18),hh=S(34);
+            if(compactLayout) {
+                audioTitle.Bounds=new Rectangle(S(16),S(8),w-S(32),S(28));audioSubtitle.Visible=false;
+                int ax=w-S(16);
+                overlaySeconds.Bounds=new Rectangle(ax-=S(104),S(40),S(104),hh);overlayCaption.Bounds=new Rectangle(ax-=S(62),S(40),S(58),hh);
+                step.Bounds=new Rectangle(ax-=S(104),S(40),S(100),hh);stepCaption.Bounds=new Rectangle(S(12),S(40),Math.Max(0,ax-S(16)),hh);
+                int rowHeight=(audioPanel.Height-S(94))/3;
+                for(int i=0;i<3;i++) {
+                    tiles[i].Bounds=new Rectangle(S(12),S(84)+i*(rowHeight+S(4)),w-S(24),rowHeight);
+                    int by=rowHeight-S(36),bw=S(36),p=S(12);
+                    minusButtons[i].Bounds=new Rectangle(p,by,bw,S(28));plusButtons[i].Bounds=new Rectangle(tiles[i].Width-p-bw,by,bw,S(28));
+                    muteButtons[i].Bounds=new Rectangle(p+bw+S(8),by,tiles[i].Width-p*2-bw*2-S(16),S(28));
+                }return;
+            }
+            audioSubtitle.Visible=true;
             audioTitle.Bounds=new Rectangle(S(20),S(14),S(200),S(30));
             int x=w-S(20);
             overlaySeconds.Bounds=new Rectangle(x-=S(112),y,S(112),hh);overlayCaption.Bounds=new Rectangle(x-=S(8)+S(60),y,S(60),hh);
@@ -241,6 +298,34 @@ namespace UlanziLite {
         }
         void LayoutEditor() {
             int w=editorPanel.Width,h=editorPanel.Height,p=S(20),fw=w-p*2,fh=S(38);
+            bool useTabs=compactLayout;
+            if(editorTabs!=null)editorTabs.Visible=useTabs;
+            bool actionVisible=!useTabs || editorTabs.SelectedIndex==0,extraVisible=!useTabs || !actionVisible;
+            foreach(var c in new Control[]{actionCaption,kind,nameCaption,labelField,targetCaption,targetField})c.Visible=actionVisible;
+            fileButton.Visible=folderButton.Visible=actionVisible && kind.SelectedIndex==1;
+            foreach(var c in new Control[]{appsCaption,apps,imageCaption,imageField,imageBrowse,imageClear})c.Visible=extraVisible;
+            targetHint.Visible=!useTabs;
+            if(useTabs) {
+                p=S(16);fw=w-p*2;fh=S(34);
+                editorPreview.Bounds=new Rectangle(p,S(14),S(40),S(40));
+                editorTitle.Bounds=new Rectangle(S(68),S(10),S(112),S(28));
+                editState.Bounds=new Rectangle(w-p-S(84),S(14),S(84),S(26));
+                selectionSummary.Bounds=new Rectangle(S(68),S(38),w-S(84),S(20));
+                editorRule.Bounds=new Rectangle(p,S(64),fw,1);editorTabs.Bounds=new Rectangle(p,S(74),fw,S(32));
+                actionCaption.Bounds=new Rectangle(p,S(116),fw,S(20));kind.Bounds=new Rectangle(p,S(138),fw,fh);
+                nameCaption.Bounds=new Rectangle(p,S(180),fw,S(20));labelField.Bounds=new Rectangle(p,S(202),fw,fh);
+                targetCaption.Bounds=new Rectangle(p,S(244),fw-S(148),S(24));
+                folderButton.Bounds=new Rectangle(w-p-S(72),S(242),S(72),S(26));fileButton.Bounds=new Rectangle(folderButton.Left-S(6)-S(66),S(242),S(66),S(26));
+                targetField.Bounds=new Rectangle(p,S(272),fw,fh);
+                appsCaption.Bounds=new Rectangle(p,S(120),fw,S(22));apps.Width=fw;apps.Location=new Point(p,S(146));
+                imageCaption.Bounds=new Rectangle(p,S(198),fw,S(22));
+                imageClear.Bounds=new Rectangle(w-p-fh,S(226),fh,fh);imageBrowse.Bounds=new Rectangle(imageClear.Left-S(6)-fh,S(226),fh,fh);
+                imageField.Bounds=new Rectangle(p,S(226),imageBrowse.Left-S(8)-p,fh);
+                int compactRow=h-p-S(30),compactSave=compactRow-S(8)-S(36);
+                validation.Bounds=new Rectangle(p,compactSave-S(32),fw,S(24));footerRule.Bounds=new Rectangle(p,compactSave-S(6),fw,1);
+                saveButton.Bounds=new Rectangle(p,compactSave,fw,S(36));int compactThird=(fw-S(12))/3;
+                undoButton.Bounds=new Rectangle(p,compactRow,compactThird,S(30));resetButton.Bounds=new Rectangle(p+compactThird+S(6),compactRow,compactThird,S(30));testButton.Bounds=new Rectangle(p+2*(compactThird+S(6)),compactRow,fw-2*(compactThird+S(6)),S(30));return;
+            }
             editorPreview.Bounds=new Rectangle(p,p,S(64),S(64));
             int pill=Math.Max(S(76),editState.PreferredWidth());editState.Bounds=new Rectangle(w-p-pill,S(24),pill,S(26));
             editorTitle.Bounds=new Rectangle(S(98),S(18),Math.Max(0,w-S(98)-p-pill-S(8)),S(34));
@@ -348,6 +433,7 @@ namespace UlanziLite {
                 try {key.Validate();}catch(ArgumentException ex){
                     validation.Text=ex.Message;tips.SetToolTip(validation,ex.Message);
                     FieldBox invalid=ex.Message.Contains("Name")?labelField:ex.Message.Contains("image") || ex.Message.Contains("Icon")?imageField:targetField;
+                    if(compactLayout)editorTabs.SelectedIndex=invalid==imageField?1:0;
                     invalid.Invalid=true;ActiveControl=invalid.Input;invalid.Input.Focus();invalid.Input.SelectAll();Feedback("Check your input. "+ex.Message,true);return;
                 }
                 ClearValidation();var page=config.Pages[config.Page];var old=page.Keys[selected];page.Keys[selected]=key;
@@ -376,8 +462,8 @@ namespace UlanziLite {
         void SetWidePreview(Bitmap image) {var old=widePreview.Image;widePreview.Image=image;if(old!=null)old.Dispose();}
         byte[] WindowMode(int mode) {return Encoding.ASCII.GetBytes(mode+"|0|0|"+DateTime.Now.ToString("HH:mm:ss")+"|0");}
         async Task PumpWideDisplay() {
-            long now=uptime.ElapsedMilliseconds;DateTime clockTime=DateTime.Now;long clockSecond=clockTime.Ticks/TimeSpan.TicksPerSecond;
-            if(updatingWide || syncing || !deck.IsConnected || now<nextWideAttempt || !wideState.NeedsUpdate(now,clockSecond))return;
+            long now=uptime.ElapsedMilliseconds;DateTime clockTime=DateTime.Now;long clockMinute=clockTime.Ticks/TimeSpan.TicksPerMinute;
+            if(updatingWide || syncing || !deck.IsConnected || now<nextWideAttempt || !wideState.NeedsUpdate(now,clockMinute))return;
             updatingWide=true;
             await displayWriter.WaitAsync();
             try {
@@ -392,10 +478,10 @@ namespace UlanziLite {
                     SetWidePreview(WideArtwork.Audio(states,active,appName));
                 }else {png=await Task.Run(()=>{using(var clock=WideArtwork.Clock(clockTime))return WideArtwork.Encode(clock);});SetWidePreview(WideArtwork.Clock(clockTime));}
                 byte[] bundle=await Task.Run(()=>displayImages.Wide(png));
-                await deck.Send(1,bundle,true);
+                await deck.Send(Protocol.SetPage,bundle,true);
                 await deck.Send(6,WindowMode(2),false);
-                bool wasAudio=wideState.SentAudio;wideState.MarkSent(showAudio,version,clockSecond);
-                if(showAudio || wasAudio)Program.Log("Wide display: "+(showAudio?"audio":"clock image")+" ("+bundle.Length+" bytes)");
+                bool wasAudio=wideState.SentAudio;wideState.MarkSent(showAudio,version,clockMinute);
+                Program.Log("Compatible display refresh 0x0001: "+(showAudio?"audio":wasAudio?"clock restored":"clock minute")+" ("+bundle.Length+" bytes)");
             }catch(Exception ex){wideState.MarkSent(true,-1);nextWideAttempt=uptime.ElapsedMilliseconds+1000;Program.Log("Wide display update failed: "+ex.Message);}
             finally {displayWriter.Release();updatingWide=false;}
         }
@@ -409,7 +495,10 @@ namespace UlanziLite {
                 for(int i=10;i<13;i++)RenderKey(i);
                 if(deck.IsConnected){
                     await displayWriter.WaitAsync();
-                    try {var bundle=await Task.Run(()=>displayImages.Usage());await deck.Send(1,bundle,true);await deck.Send(6,WindowMode(2),false);Program.Log("Usage display: full page ("+bundle.Length+" bytes)");}
+                    try {
+                        var bundle=await Task.Run(()=>displayImages.Usage(true));
+                        if(bundle!=null){await deck.Send(Protocol.SetPage,bundle,true);await deck.Send(6,WindowMode(2),false);Program.Log("Compatible display refresh 0x0001: usage changed ("+bundle.Length+" bytes)");}
+                    }
                     finally {displayWriter.Release();}
                 }
                 usageRevision=revision;usageMinute=minute;
@@ -445,8 +534,8 @@ namespace UlanziLite {
                     DateTime initialClock=DateTime.Now;
                     byte[] bundle=await Task.Run(()=>{using(var clock=WideArtwork.Clock(initialClock))return displayImages.Reset(snapshot,WideArtwork.Encode(clock));});
                     await deck.Send(11,Encoding.UTF8.GetBytes("{\"Align\":\"bottom\",\"Color\":16777215,\"FontName\":\"Roboto\",\"ShowTitle\":false,\"Size\":10,\"Weight\":80}"),false);
-                    await deck.Send(1,bundle,true);
-                    await deck.Send(6,WindowMode(2),false);wideState.Reset();wideState.MarkSent(false,wideState.Version,initialClock.Ticks/TimeSpan.TicksPerSecond);PreviewClock();
+                    await deck.Send(Protocol.SetPage,bundle,true);
+                    await deck.Send(6,WindowMode(2),false);wideState.Reset();wideState.MarkSent(false,wideState.Version,initialClock.Ticks/TimeSpan.TicksPerMinute);PreviewClock();
                     await deck.Send(10,Encoding.ASCII.GetBytes(config.Brightness.ToString()),false);
                     Feedback("Applied to device · "+config.Pages[config.Page].Name,false);Program.Log("Bundle sent: "+bundle.Length+" bytes");
                 }while(pending && deck.IsConnected);

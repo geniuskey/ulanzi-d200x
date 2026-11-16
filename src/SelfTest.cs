@@ -10,6 +10,18 @@ namespace UlanziLite {
     static class SelfTest {
         static readonly StringBuilder results=new StringBuilder();
         static int checks;
+        public static int RunLayoutTests() {
+            try {CheckEditor();File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layout-test-results.txt"),results.ToString()+"PASS: "+checks+" checks",Encoding.UTF8);return 0;}
+            catch(Exception ex){File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layout-test-results.txt"),results.ToString()+"FAIL: "+ex,Encoding.UTF8);return 1;}
+        }
+        public static int RunDisplayTests() {
+            try {
+                using(var clock=WideArtwork.Clock(DateTime.Now))CheckDisplayRefresh(WideArtwork.Encode(clock));
+                byte[] packet=Protocol.Packet(Protocol.SetPage,new byte[]{1,2,3},3);
+                Check(packet[2]==0 && packet[3]==1 && BitConverter.ToInt32(packet,4)==3,"refresh uses firmware-compatible full-page framing");
+                File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"display-test-results.txt"),results.ToString()+"PASS: "+checks+" checks"+Environment.NewLine,Encoding.UTF8);return 0;
+            }catch(Exception ex){File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"display-test-results.txt"),results.ToString()+"FAIL: "+ex,Encoding.UTF8);return 1;}
+        }
         static void Check(bool condition,string name){if(!condition)throw new Exception(name);checks++;results.AppendLine("PASS: "+name);}
         static bool Rejects(Action action) {try{action();return false;}catch(ArgumentException){return true;}catch(InvalidDataException){return true;}}
         static void CheckSafeEdge(System.Drawing.Bitmap image,string name) {
@@ -79,6 +91,18 @@ namespace UlanziLite {
         static void CheckDisplayRefresh(byte[] widePng) {
             var images=new Artwork.DisplayImages();var page=Configuration.Defaults().Pages[0];
             var initial=DisplayAssets(images.Reset(page,widePng));
+            Check(images.Usage(true)==null,"unchanged usage avoids a device upload after page sync");
+            string oldStatus=UsageMeters.Status(0);
+            try {
+                UsageMeters.SetStatus(0,"Refresh test");
+                var changed=DisplayAssets(images.Usage(true));
+                Check(!changed["0_2"].SequenceEqual(initial["0_2"]),"changed usage image triggers a complete update");
+                Check(changed["3_2"].SequenceEqual(widePng),"changed usage retains the wide display");
+                Check(images.Usage(true)==null,"duplicate usage update is suppressed");
+                UsageMeters.SetStatus(0,"Coalesced test");
+                var combined=DisplayAssets(images.Wide(widePng));
+                Check(!combined["0_2"].SequenceEqual(changed["0_2"]) && images.Usage(true)==null,"wide refresh coalesces pending usage changes");
+            }finally {UsageMeters.SetStatus(0,oldStatus);}
             // Cross both one-minute repaint and two-minute quota-poll boundaries.
             foreach(int seconds in new[]{1,59,60,61,119,120,121,180}) {
                 byte[] clock;using(var bitmap=WideArtwork.Clock(new DateTime(2026,1,1).AddSeconds(seconds)))clock=WideArtwork.Encode(bitmap);
@@ -144,10 +168,11 @@ namespace UlanziLite {
         }
         static bool IsInteractive(Control c) {return c is Button || c is TextBox || c is ComboBox || c is SegmentedControl || c is Stepper || c is Slider;}
         static void CheckEditorLayout(Form form,string name) {
-            foreach(var input in Descendants(form).Where(c=>IsInteractive(c))) {
+            Check(!form.HorizontalScroll.Visible && !form.VerticalScroll.Visible,name+": no window scrollbars");
+            foreach(var input in Descendants(form).Where(c=>c.Visible && IsInteractive(c))) {
                 if(!input.Parent.ClientRectangle.Contains(input.Bounds))throw new Exception(name+": clipped "+input.AccessibleName);
                 foreach(Control other in input.Parent.Controls)
-                    if(other!=input && IsInteractive(other) && input.Bounds.IntersectsWith(other.Bounds))throw new Exception(name+": overlapping "+input.AccessibleName);
+                    if(other!=input && other.Visible && IsInteractive(other) && input.Bounds.IntersectsWith(other.Bounds))throw new Exception(name+": overlapping "+input.AccessibleName);
             }
             Check(true,name);
         }
@@ -165,6 +190,17 @@ namespace UlanziLite {
                     form.ClientSize=new System.Drawing.Size(width,860);Application.DoEvents();
                     CheckEditorLayout(form,"window width "+width+" keeps interactive controls separate and visible");
                     using(var bitmap=new System.Drawing.Bitmap(form.Width,form.Height)){form.DrawToBitmap(bitmap,new System.Drawing.Rectangle(0,0,form.Width,form.Height));bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layout-"+width+".png"));}
+                }
+                foreach(var size in new[]{new System.Drawing.Size(800,560),new System.Drawing.Size(900,640),new System.Drawing.Size(1024,700),new System.Drawing.Size(1200,700)}) {
+                    form.ClientSize=size;Application.DoEvents();
+                    var workspace=Descendants(form).OfType<SegmentedControl>().Single(c=>c.AccessibleName=="Workspace view");
+                    var editor=Descendants(form).OfType<SegmentedControl>().Single(c=>c.AccessibleName=="Editor view");
+                    for(int view=0;view<2;view++)for(int editView=0;editView<2;editView++) {
+                        workspace.SelectedIndex=view;editor.SelectedIndex=editView;Application.DoEvents();
+                        CheckEditorLayout(form,"compact "+size+" workspace "+view+" editor "+editView+" fits");
+                        if(view==editView)using(var bitmap=new System.Drawing.Bitmap(form.Width,form.Height)){form.DrawToBitmap(bitmap,new System.Drawing.Rectangle(0,0,form.Width,form.Height));bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"layout-"+size.Width+"x"+size.Height+"-"+view+".png"));}
+                    }
+                    workspace.SelectedIndex=editor.SelectedIndex=0;
                 }
                 form.ClientSize=new System.Drawing.Size(1180,860);Application.DoEvents();
                 var kind=Descendants(form).OfType<SegmentedControl>().Single(c=>c.AccessibleName=="Button action");
@@ -206,6 +242,9 @@ namespace UlanziLite {
                 Check(RuntimeContext.IsIsolatedDesktop("CodexSandboxDesktop-test"),"reject isolated controller runtime");
                 Check(!RuntimeContext.IsIsolatedDesktop("Default"),"allow normal desktop runtime");
                 byte[] packet=Protocol.Packet(0x0102,new byte[]{1,17,2,3},4);int index,state;
+                byte[] updatePacket=Protocol.Packet(Protocol.SetPage,new byte[]{1,2,3},3);
+                Check(updatePacket[2]==0 && updatePacket[3]==1 && BitConverter.ToInt32(updatePacket,4)==3,"refresh uses firmware-compatible full-page framing");
+                Check(Protocol.Packet(Protocol.SetPage,new byte[0],0)[3]==1,"initial synchronization still sets the full page");
                 Check(Protocol.Parse(packet,1024,out index,out state) && index==17 && state==3,"dial right");
                 byte[] withId=new byte[1025];Buffer.BlockCopy(packet,0,withId,1,1024);
                 Check(Protocol.Parse(withId,1025,out index,out state) && index==17 && state==3,"Windows report ID");
@@ -236,13 +275,14 @@ namespace UlanziLite {
                 display.Touch(8000,1);display.MarkSent(true,display.Version);display.Reset();Check(display.NeedsUpdate(8100),"reapply overlay after page sync");
                 display=new WideScreenState {HoldMilliseconds=5000};display.Touch(1000,2);display.MarkSent(true,display.Version);
                 Check(display.WantsAudio(5999) && !display.WantsAudio(6000) && display.NeedsUpdate(6000,100),"configured timeout restores clock");
-                display.MarkSent(false,display.Version,100);Check(!display.NeedsUpdate(6100,100) && display.NeedsUpdate(7000,101),"clock images refresh once per second after overlay");
+                display.MarkSent(false,display.Version,100);Check(!display.NeedsUpdate(6100,100) && !display.NeedsUpdate(65000,100) && display.NeedsUpdate(66000,101),"clock images refresh only when the minute changes after overlay");
                 display.MarkSent(false,display.Version,101);display.Touch(7100,1);Check(display.NeedsUpdate(7100,101),"new knob input interrupts ticking clock");
                 byte[] clockPng;
                 using(var clock=WideArtwork.Clock(new DateTime(2026,11,10,22,0,0))){CheckSafeEdge(clock,"clock reserves bottom five percent");clock.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"clock-preview.png"));clockPng=WideArtwork.Encode(clock);}
                 using(var nativeClock=new System.Drawing.Bitmap(new MemoryStream(clockPng)))CheckSafeEdge(nativeClock,"firmware clock image preserves safe edge");
                 using(var key=Artwork.Render(config.Pages[0].Keys[0]))CheckSafeEdge(key,"button artwork reserves bottom five percent");
-                using(var clock=WideArtwork.Clock(new DateTime(2026,11,10,22,0,1)))Check(!clockPng.SequenceEqual(WideArtwork.Encode(clock)),"clock image seconds advance");
+                using(var clock=WideArtwork.Clock(new DateTime(2026,11,10,22,0,59)))Check(clockPng.SequenceEqual(WideArtwork.Encode(clock)),"clock image stays unchanged within a minute");
+                using(var clock=WideArtwork.Clock(new DateTime(2026,11,10,22,1,0)))Check(!clockPng.SequenceEqual(WideArtwork.Encode(clock)),"clock image advances at the next minute");
                 byte[] widePng;
                 using(var wide=WideArtwork.Audio(new[]{new AudioState {Available=true,Level=.65f},new AudioState {Available=true,Level=.42f,Muted=true},new AudioState {Available=true,Level=.68f}},2,"Chrome")) {
                     CheckSafeEdge(wide,"audio overlay reserves bottom five percent");

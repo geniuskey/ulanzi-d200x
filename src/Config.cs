@@ -108,22 +108,31 @@ namespace UlanziLite {
             return icons;
         }
         public static byte[] Bundle(DeckPage page,byte[] wideImage=null) {return BundleForIcons(PageIcons(page,wideImage));}
-        // Every upload must be self-contained. Partial ZIPs can invalidate images
-        // referenced by the previous manifest on the device. Cache unchanged PNGs
-        // so the ticking clock does not redraw applications or reload their icons.
+        // Use complete 0x0001 bundles: target firmware loses button images with
+        // 0x000d even when all assets are included. Compare PNG bytes,
+        // not ZIP bytes (padding and ZIP timestamps vary between builds).
         public sealed class DisplayImages {
             Dictionary<int,byte[]> icons;
             public byte[] Reset(DeckPage page,byte[] wideImage) {
                 icons=PageIcons(page,wideImage);return BundleForIcons(icons);
             }
-            public byte[] Usage() {
+            bool RefreshUsage() {
                 if(icons==null)throw new InvalidOperationException("Display page has not been initialized.");
-                for(int i=0;i<3;i++)using(var image=UsageMeters.Render(i))using(var ms=new MemoryStream()){image.Save(ms,ImageFormat.Png);icons[i+10]=ms.ToArray();}
+                bool changed=false;
+                for(int i=0;i<3;i++)using(var image=UsageMeters.Render(i))using(var ms=new MemoryStream()) {
+                    image.Save(ms,ImageFormat.Png);byte[] png=ms.ToArray();
+                    if(!icons[i+10].SequenceEqual(png)){icons[i+10]=png;changed=true;}
+                }
+                return changed;
+            }
+            public byte[] Usage(bool skipUnchanged=false) {
+                bool changed=RefreshUsage();
+                if(skipUnchanged && !changed)return null;
                 return BundleForIcons(icons);
             }
             public byte[] Wide(byte[] png) {
                 if(icons==null)throw new InvalidOperationException("Display page has not been initialized.");
-                icons[13]=png;return BundleForIcons(icons);
+                RefreshUsage();icons[13]=png;return BundleForIcons(icons);
             }
         }
         static byte[] BundleForIcons(Dictionary<int,byte[]> icons) {

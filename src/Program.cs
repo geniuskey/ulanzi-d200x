@@ -16,6 +16,8 @@ namespace UlanziLite {
             }catch { }
         }
         [STAThread] static int Main(string[] args) {
+            if(args.Contains("--display-test"))return SelfTest.RunDisplayTests();
+            if(args.Contains("--layout-test"))return SelfTest.RunLayoutTests();
             if(args.Contains("--usage-test"))return LocalUsageReader.Diagnose();
             if(args.Contains("--render")) {
                 if(args.Contains("--live-usage"))new LocalUsageReader().RefreshAsync().GetAwaiter().GetResult();

@@ -13,13 +13,15 @@ Builds treat warnings as errors. `test.ps1` waits for the GUI executable and che
 | --- | --- | --- |
 | `--self-test` | `test-results.txt`, `audio-preview.png`, `clock-preview.png`, `layout-*.png` | HID framing and parsing, URL/settings validation, ZIP manifests and packet boundaries, image sizes, overlay transitions, atomic saves and backups, editor drafts/previews/save/cancel/errors/reset, and control overlaps/clipping at default, 1120, and 1500 widths |
 | `--render` | `preview.png` | Default UI rendering without a device |
+| `--layout-test` | `layout-test-results.txt`, `layout-*.png` | Editor actions and layout checks at default, 1120/1500 widths, and compact 800×560, 900×640, 1024×700, 1200×700 client sizes; verifies both independent tab selections, no window scrollbars, and visible controls without overlap or clipping; no device access or settings writes |
+| `--display-test` | `display-test-results.txt` | Focused display regression checks: complete image retention, update opcode, unchanged usage suppression, and combined clock/usage updates; no device or settings writes |
 | `--audio-test` | `audio-test-results.txt` | Default input/output reads; volume and mute control/restoration for the test process's silent session |
 | `--usage-test` | `usage-test-results.txt` | Optional diagnostics with real CLI logins and network access |
 | `--diagnose` | `diagnostics.txt` | Execution desktop, HID interfaces, default audio devices, and foreground app state |
 
 Self-tests and rendering do not connect to USB or save user settings. File replacement tests use temporary directories and clean up afterward. Usage tests use synthetic responses to check Codex, Claude, and Gemini parsing, used-percentage direction, missing values, resets, and caching without credentials or network access.
 
-Display refresh tests alternate clock and usage updates around one- and two-minute boundaries. They verify that each ZIP includes all 14 display images and preserves other buttons and the latest clock image. Rendered application examples depend on the machine's Start menu. Run audio tests separately on a PC with an output device; CI does not assume one exists.
+Display refresh tests alternate clock and usage updates around one- and two-minute boundaries. They verify that each ZIP includes all 14 display images and preserves other buttons and the latest clock image. They also check unchanged usage suppression and coalescing usage changes into wide-display uploads. Rendered application examples depend on the machine's Start menu. Run audio tests separately on a PC with an output device; CI does not assume one exists.
 
 Website icon tests use synthetic responses for redirects, relative icons, HTML base URLs, shortcut path/query exclusion, ICO fallback, memory/disk caching, custom-image precedence, invalid/offline fallback, and retry intervals.
 

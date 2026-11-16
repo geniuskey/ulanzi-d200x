@@ -11,12 +11,12 @@ namespace UlanziLite {
         public int Version {get;private set;}
         public int ActiveKnob {get;private set;}
         public bool SentAudio {get;private set;}
-        int sentVersion=-1; long until,lastClockSecond=-1;
+        int sentVersion=-1; long until,lastClockMinute=-1;
         public void Touch(long now,int knob) {until=now+HoldMilliseconds;ActiveKnob=knob;Version++;}
         public bool WantsAudio(long now) {return now<until;}
-        public bool NeedsUpdate(long now,long clockSecond=-1) {return WantsAudio(now)?(!SentAudio || sentVersion!=Version):(SentAudio || (clockSecond>=0 && lastClockSecond!=clockSecond));}
-        public void MarkSent(bool audio,int version,long clockSecond=-1) {SentAudio=audio;sentVersion=version;if(!audio)lastClockSecond=clockSecond;}
-        public void Reset() {SentAudio=false;sentVersion=-1;lastClockSecond=-1;}
+        public bool NeedsUpdate(long now,long clockMinute=-1) {return WantsAudio(now)?(!SentAudio || sentVersion!=Version):(SentAudio || (clockMinute>=0 && lastClockMinute!=clockMinute));}
+        public void MarkSent(bool audio,int version,long clockMinute=-1) {SentAudio=audio;sentVersion=version;if(!audio)lastClockMinute=clockMinute;}
+        public void Reset() {SentAudio=false;sentVersion=-1;lastClockMinute=-1;}
     }
     public static class WideArtwork {
         // The bottom edge is obscured at the normal viewing angle: reserve
@@ -50,15 +50,13 @@ namespace UlanziLite {
             var bitmap=new Bitmap(392,196,PixelFormat.Format24bppRgb);
             using(var g=Graphics.FromImage(bitmap))
             using(var number=new Font(Typography.NumberFontName,104,FontStyle.Regular,GraphicsUnit.Pixel))
-            using(var seconds=new Font(Typography.NumberFontName,46,FontStyle.Regular,GraphicsUnit.Pixel))
             using(var date=new Font(Typography.UiFontName,19,FontStyle.Regular,GraphicsUnit.Pixel)) {
                 g.Clear(Background);g.TextRenderingHint=System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
                 g.SetClip(new Rectangle(0,0,392,SafeHeight));
                 string timeText=time.ToString("HH:mm");
-                float fittedSize=Math.Min(number.Size,number.Size*280/g.MeasureString(timeText,number).Width);
+                float fittedSize=Math.Min(number.Size,number.Size*372/g.MeasureString(timeText,number).Width);
                 using(var fitted=new Font(Typography.NumberFontName,fittedSize,FontStyle.Regular,GraphicsUnit.Pixel))
-                    Text(g,timeText,fitted,Color.White,new Rectangle(5,18,292,126));
-                Text(g,time.ToString("ss"),seconds,Accent,new Rectangle(296,53,86,63));
+                    Text(g,timeText,fitted,Color.White,new Rectangle(10,18,372,126));
                 Text(g,time.ToString("yyyy.MM.dd  ddd",System.Globalization.CultureInfo.InvariantCulture),date,Color.FromArgb(168,184,201),new Rectangle(10,137,372,35));
             }return bitmap;
         }

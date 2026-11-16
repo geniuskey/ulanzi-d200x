@@ -94,6 +94,7 @@ namespace UlanziLite {
 
     class KeyButton : Button {
         bool selected,hover,pressed;Bitmap cache;Image cacheSource;
+        public int ImageInset=-1,ImageRadius=-1;
 
         public KeyButton() {
             SetStyle(ControlStyles.UserPaint|ControlStyles.AllPaintingInWmPaint|ControlStyles.OptimizedDoubleBuffer|ControlStyles.ResizeRedraw,true);
@@ -129,10 +130,10 @@ namespace UlanziLite {
 
         protected override void OnPaint(PaintEventArgs e) {
             var g=e.Graphics;Theme.PaintParent(this,g);Theme.Prepare(g);
-            int inset=Theme.S(4);
+            int inset=ImageInset>=0?ImageInset:Theme.S(4);
             var image=Rectangle.Inflate(ClientRectangle,-inset,-inset);
             if(image.Width<=0 || image.Height<=0)return;
-            float radius=Theme.S(14);
+            float radius=ImageRadius>=0?ImageRadius:Theme.S(14);
             using(var path=Theme.RoundRect(image,radius)) {
                 var source=BackgroundImage;
                 if(source==null)using(var b=new SolidBrush(Theme.Raised))g.FillPath(b,path);
@@ -201,9 +202,10 @@ namespace UlanziLite {
             if(!available)TextRenderer.DrawText(g,"—",Theme.Number(17f),value,Theme.Subtle,line|TextFormatFlags.Right);
             else if(muted)TextRenderer.DrawText(g,"Muted",Theme.Semibold(10f),value,Theme.Danger,line|TextFormatFlags.Right);
             else TextRenderer.DrawText(g,Math.Round(level*100)+"%",Theme.Number(17f),value,Theme.Text,line|TextFormatFlags.Right);
-            TextRenderer.DrawText(g,detail,Theme.Ui(8.5f),new Rectangle(p,Theme.S(38),Math.Max(0,w-2*p),Theme.S(18)),Theme.Muted,line);
+            bool compact=Height<Theme.S(110);
+            if(!compact)TextRenderer.DrawText(g,detail,Theme.Ui(8.5f),new Rectangle(p,Theme.S(38),Math.Max(0,w-2*p),Theme.S(18)),Theme.Muted,line);
             int bar=Theme.S(6),barWidth=Math.Max(0,w-2*p);
-            var track=new RectangleF(p,Theme.S(62),barWidth,bar);
+            var track=new RectangleF(p,Theme.S(compact?40:62),barWidth,bar);
             Theme.FillRound(g,track,bar/2f,Theme.Background);
             float filled=available?level*barWidth:0;
             if(filled>0)Theme.FillRound(g,new RectangleF(p,track.Y,filled,bar),bar/2f,!available?Theme.Subtle:muted?Theme.Danger:Theme.Accent);

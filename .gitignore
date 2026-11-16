@@ -4,6 +4,8 @@ settings.json.tmp
 ulanzi-lite.log*
 diagnostics.txt
 test-results.txt
+display-test-results.txt
+layout-test-results.txt
 audio-test-results.txt
 preview.png
 audio-preview.png

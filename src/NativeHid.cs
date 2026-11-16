@@ -55,6 +55,8 @@ namespace UlanziLite {
         }
     }
     public static class Protocol {
+        // Target firmware loses button images with 0x000d, even with a full ZIP.
+        public const int SetPage=0x0001;
         public static byte[] Packet(int command, byte[] body, int length) {
             if (body.Length > 1016) throw new ArgumentException("Payload too large");
             byte[] p = new byte[1024]; p[0]=p[1]=0x7c; p[2]=(byte)(command>>8); p[3]=(byte)command;

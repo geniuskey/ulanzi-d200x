@@ -43,7 +43,7 @@ Website shortcuts fetch their icons automatically. Custom images take priority; 
 - **Reset button** creates a draft that you can save or cancel.
 - When quitting, choose whether to save, discard, or cancel if drafts remain. Drafts live in memory and cannot be recovered after a crash.
 
-Volume step, brightness, overlay duration, and current page save immediately. The window expands its button and audio areas when resized; smaller windows scroll.
+Volume step, brightness, overlay duration, and current page save immediately. The window adapts to its available size without window scrollbars. In smaller windows, use Deck / Audio tabs on the left and Action / Icon / apps tabs in the editor. The device preview keeps its proportions; save and discard controls remain visible.
 
 ## AI usage at a glance
 
@@ -73,7 +73,7 @@ Opening the settings window retains the last selected external app. If it has no
 
 The wide display shows your PC's local time and date, with English weekday names. Knob input switches it to three volume levels, mute states, and the active knob. It returns to the clock three seconds after the last input by default; choose 1–30 seconds. Device control continues in the system tray.
 
-The clock uses large hours and minutes with smaller seconds. All device images reserve the bottom 5% for the viewing angle. The interface uses Segoe UI with Arial fallback; numbers use Bahnschrift with Segoe UI fallback. No font installation is required. Custom Unicode labels remain supported through Windows font fallback.
+The clock shows large hours and minutes and updates once per minute to reduce USB traffic. All device images reserve the bottom 5% for the viewing angle. The interface uses Segoe UI with Arial fallback; numbers use Bahnschrift with Segoe UI fallback. No font installation is required. Custom Unicode labels remain supported through Windows font fallback.
 
 Closing the window hides it to the tray. Double-click the tray icon to reopen it; choose **Exit** in the tray menu to quit.
 
