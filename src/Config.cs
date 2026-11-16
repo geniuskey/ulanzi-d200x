@@ -26,7 +26,17 @@ namespace UlanziLite {
             if(Kind=="website") { Uri uri; if(!Uri.TryCreate(Target,UriKind.Absolute,out uri) || (uri.Scheme!="https" && uri.Scheme!="http") || String.IsNullOrEmpty(uri.Host))throw new ArgumentException("Enter an http:// or https:// URL."); }
             else if(Kind=="application") { if(!File.Exists(Target) && !Directory.Exists(Target))throw new ArgumentException("App or file path not found."); }
         }
-        public void Launch() { Validate(false); if(!String.IsNullOrWhiteSpace(Target))Process.Start(new ProcessStartInfo(Target) {UseShellExecute=true}); }
+        internal static ProcessStartInfo FolderStartInfo(string path) {
+            string folder=Path.GetFullPath(path);
+            // Avoid a trailing backslash escaping the closing argument quote (including drive roots).
+            if(folder.EndsWith("\\",StringComparison.Ordinal))folder+=".";
+            return new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),"explorer.exe"),"\""+folder+"\"") {UseShellExecute=false};
+        }
+        public void Launch() {
+            Validate(false);
+            if(String.IsNullOrWhiteSpace(Target))return;
+            Process.Start(Kind=="application" && Directory.Exists(Target)?FolderStartInfo(Target):new ProcessStartInfo(Target) {UseShellExecute=true});
+        }
     }
     public class DeckPage { public string Name; public List<KeyBinding> Keys=new List<KeyBinding>(); }
     public class Configuration {

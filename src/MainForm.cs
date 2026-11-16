@@ -105,7 +105,7 @@ namespace UlanziLite {
             brightness.ValueChanged+=(s,e)=>{config.Brightness=brightness.Value;brightnessValue.Text=brightness.Value+"%";brightnessDirty=true;};
             brightness.ValueCommitted+=async(s,e)=>await ApplyBrightness();
             tips.SetToolTip(brightness,"Device brightness");tips.SetToolTip(brightnessIcon,"Device brightness");
-            dataButton=ButtonAt(canvas,"Data folder",Theme.Folder,ButtonKind.Ghost,()=>{try{Process.Start(new ProcessStartInfo(AppDomain.CurrentDomain.BaseDirectory){UseShellExecute=true});}catch(Exception ex){Feedback(ex.Message,true);}});
+            dataButton=ButtonAt(canvas,"Data folder",Theme.Folder,ButtonKind.Ghost,()=>{try{Process.Start(KeyBinding.FolderStartInfo(AppDomain.CurrentDomain.BaseDirectory));}catch(Exception ex){Feedback(ex.Message,true);}});
             guideButton=ButtonAt(canvas,"Guide",Theme.Help,ButtonKind.Ghost,ShowGuide,"Quick guide");
             startupButton=ButtonAt(canvas,"","\uE713",ButtonKind.Ghost,ShowStartupSettings,"Startup settings");
             tips.SetToolTip(startupButton,"Startup settings");

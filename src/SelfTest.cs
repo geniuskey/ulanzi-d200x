@@ -36,6 +36,11 @@ namespace UlanziLite {
             Check(Rejects(()=>new KeyBinding {Kind="unknown"}.Validate()),"empty actions reject unknown kind");
             Check(Rejects(()=>new KeyBinding {Image="missing-icon.png"}.Validate()),"missing icon has actionable validation");
             new KeyBinding {Image="missing-icon.png"}.Validate(false);
+            string explorer=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),"explorer.exe");
+            var folderLaunch=KeyBinding.FolderStartInfo(@"C:\Work folder\작업");
+            Check(folderLaunch.FileName==explorer && !folderLaunch.UseShellExecute && folderLaunch.Arguments=="\"C:\\Work folder\\작업\"","folders launch Explorer explicitly with one quoted Unicode path");
+            Check(KeyBinding.FolderStartInfo(@"C:\").Arguments=="\"C:\\.\"","drive root does not escape closing argument quote");
+            Check(KeyBinding.FolderStartInfo(@"\\server\shared folder\").Arguments=="\"\\\\server\\shared folder\\.\"","UNC folder trailing separator is quoted safely");
             Check(Rejects(()=>Configuration.Parse("{")),"reject malformed JSON");
             Check(Rejects(()=>Configuration.Parse("null")),"reject null configuration");
             Check(Rejects(()=>Configuration.Parse("{\"Version\":2}")),"reject unknown configuration version");
