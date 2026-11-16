@@ -31,6 +31,7 @@ namespace UlanziLite {
     public class DeckPage { public string Name; public List<KeyBinding> Keys=new List<KeyBinding>(); }
     public class Configuration {
         public int Version=1, Step=2, Brightness=65, Page=0, OverlaySeconds=3;
+        public bool StartInTray=false;
         public List<DeckPage> Pages=new List<DeckPage>();
         public static readonly string PathName=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"settings.json");
         public static readonly JavaScriptSerializer Json=new JavaScriptSerializer();

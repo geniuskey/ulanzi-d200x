@@ -31,6 +31,7 @@ namespace UlanziLite {
             Check(true,name);
         }
         static void CheckConfiguration() {
+            Check(!Configuration.Defaults().StartInTray,"fresh installs open the editor");
             Check(Rejects(()=>new KeyBinding {Label=new string('a',41)}.Validate()),"empty actions still validate labels");
             Check(Rejects(()=>new KeyBinding {Kind="unknown"}.Validate()),"empty actions reject unknown kind");
             Check(Rejects(()=>new KeyBinding {Image="missing-icon.png"}.Validate()),"missing icon has actionable validation");
@@ -39,8 +40,11 @@ namespace UlanziLite {
             Check(Rejects(()=>Configuration.Parse("null")),"reject null configuration");
             Check(Rejects(()=>Configuration.Parse("{\"Version\":2}")),"reject unknown configuration version");
             Check(Rejects(()=>Configuration.Parse("{\"Pages\":[{\"Keys\":[null]}]}")),"reject malformed key layout");
-            var config=Configuration.Defaults();config.Page=999;config.Step=-1;config.Brightness=200;config.OverlaySeconds=0;config.Pages[0].Name=null;
+            var config=Configuration.Defaults();config.StartInTray=true;config.Page=999;config.Step=-1;config.Brightness=200;config.OverlaySeconds=0;config.Pages[0].Name=null;
             var normalized=Configuration.Parse(Configuration.Json.Serialize(config));
+            Check(normalized.StartInTray,"tray preference survives settings round trip");
+            var legacy=Configuration.Json.Deserialize<System.Collections.Generic.Dictionary<string,object>>(Configuration.Json.Serialize(config));legacy.Remove("StartInTray");
+            Check(!Configuration.Parse(Configuration.Json.Serialize(legacy)).StartInTray,"older settings default to showing the editor");
             Check(normalized.Page==2 && normalized.Step==1 && normalized.Brightness==100 && normalized.OverlaySeconds==1 && normalized.Pages[0].Name=="Page 1","normalize settings bounds and missing page names");
             string folder=Path.Combine(Path.GetTempPath(),"UlanziLite-test-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
             try {
@@ -50,6 +54,42 @@ namespace UlanziLite {
                 Check(Configuration.Parse(File.ReadAllText(path)).Pages[0].Keys[0].Label=="Updated","atomic configuration replacement");
                 Check(Configuration.Parse(File.ReadAllText(path+".bak")).Pages[0].Keys[0].Label=="Original" && !File.Exists(path+".tmp"),"preserve previous configuration and clean temporary file");
             }finally{Directory.Delete(folder,true);}
+        }
+        static void CheckStartup() {
+            string path="Software\\Geniuskey\\UlanziLite-Tests-"+Guid.NewGuid().ToString("N");
+            try {
+                using(var key=Microsoft.Win32.Registry.CurrentUser.CreateSubKey(path)) {
+                    string executable=Path.Combine(Path.GetTempPath(),"App folder","UlanziLite.exe");
+                    Check(!StartupRegistration.IsEnabled(key,executable),"startup initially disabled in isolated registry key");
+                    key.SetValue("OtherApp","preserved");
+                    StartupRegistration.Apply(key,executable,true,()=>{});
+                    Check((string)key.GetValue("UlanziLite")=="\""+executable+"\" --startup","startup command quotes paths containing spaces");
+                    Check(StartupRegistration.IsEnabled(key,executable),"startup enabled is read from registry");
+                    bool failed=false;
+                    try {StartupRegistration.Apply(key,executable,false,()=>{throw new IOException("Simulated save failure");});}catch(IOException){failed=true;}
+                    Check(failed && StartupRegistration.IsEnabled(key,executable),"failed settings save restores startup registration");
+                    StartupRegistration.Apply(key,executable,false,()=>{});
+                    Check(key.GetValue("UlanziLite")==null && (string)key.GetValue("OtherApp")=="preserved","disabling startup preserves other apps");
+                    key.SetValue("UlanziLite","\""+executable+"\"");
+                    Check(StartupRegistration.IsEnabled(key,executable),"original script registration is recognized");
+                    Check(!StartupRegistration.IsEnabled(key,executable+".other"),"startup registration for another portable copy is not reported enabled");
+                }
+            }finally {Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(path,false);}
+            var config=Configuration.Defaults();config.StartInTray=true;
+            using(var form=new StartupSettingsForm(config,true,()=>{throw new Exception("Preview wrote settings");})) {
+                form.Show();Application.DoEvents();
+                Check(!form.Autostart.Enabled && !form.ApplyButton.Enabled && form.StartInTray.Checked,"preview shows tray preference without allowing startup changes");
+                using(var bitmap=new System.Drawing.Bitmap(form.Width,form.Height)) {
+                    form.DrawToBitmap(bitmap,new System.Drawing.Rectangle(0,0,form.Width,form.Height));
+                    bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"startup-preview.png"));
+                }
+            }
+            using(var form=new MainForm(config,true,true)) {
+                form.Show();Application.DoEvents();
+                Check(!form.Visible && form.Opacity==1 && form.ShowInTaskbar,"tray startup hides the editor and prepares it for reopening");
+                form.Show();Application.DoEvents();
+                Check(form.Visible,"editor reopens after tray startup");
+            }
         }
         static void CheckUsageMeters() {
             DateTime now=DateTime.UtcNow;
@@ -290,7 +330,7 @@ namespace UlanziLite {
                 }
                 using(var native=new System.Drawing.Bitmap(new MemoryStream(widePng))){Check(native.Width==196 && native.Height==196,"wide image squeezed for firmware");CheckSafeEdge(native,"firmware audio image preserves safe edge");}
                 CheckDisplayRefresh(widePng);
-                CheckConfiguration();CheckUsageMeters();CheckWebsiteIcons();CheckEditor();
+                CheckConfiguration();CheckUsageMeters();CheckWebsiteIcons();CheckEditor();CheckStartup();
                 File.WriteAllText(report,results.ToString()+"PASS: "+checks+" checks"+Environment.NewLine,Encoding.UTF8);return 0;
             }catch(Exception ex){File.WriteAllText(report,results.ToString()+"FAIL: "+ex,Encoding.UTF8);return 1;}
         }

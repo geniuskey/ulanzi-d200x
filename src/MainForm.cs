@@ -24,7 +24,7 @@ namespace UlanziLite {
         Label feedback,shortcuts,editorTitle,selectionSummary,actionCaption,nameCaption,targetCaption,targetHint,appsCaption,imageCaption,validation,pagePosition;
         StatusPill status,editState; FieldBox labelField,targetField,imageField; TextBox label,target,image; SegmentedControl kind; ComboBox apps,pages;
         Stepper step,overlaySeconds; Slider brightness; bool brightnessDirty;
-        ThemeButton guideButton,dataButton,previousPage,nextPage,saveButton,undoButton,resetButton,testButton,fileButton,folderButton,imageBrowse,imageClear;
+        ThemeButton guideButton,dataButton,startupButton,previousPage,nextPage,saveButton,undoButton,resetButton,testButton,fileButton,folderButton,imageBrowse,imageClear;
         bool loadingEditor; RoundedPictureBox editorPreview,widePreview;
         NotifyIcon tray; System.Windows.Forms.Timer timer; int selected=0,ticks; bool exiting,syncing,pending; string lastEvent="";
         readonly WideScreenState wideState=new WideScreenState();
@@ -36,7 +36,8 @@ namespace UlanziLite {
         readonly ThemeButton[] deviceKnobs=new ThemeButton[3];Card deviceControls;
         SegmentedControl workspaceTabs,editorTabs;bool compactLayout;
         public MainForm(Configuration configuration) : this(configuration,false) { }
-        public MainForm(Configuration configuration,bool preview) {
+        public MainForm(Configuration configuration,bool preview) : this(configuration,preview,!preview && configuration.StartInTray) { }
+        internal MainForm(Configuration configuration,bool preview,bool startInTray) {
             previewMode=preview;config=configuration;wideState.HoldMilliseconds=config.OverlaySeconds*1000;
             using(var g=CreateGraphics())Theme.Scale=Math.Max(1f,g.DpiX/96f);
             Text=WindowTitle;BackColor=Theme.Background;ForeColor=Theme.Text;Font=new Font(Typography.UiFontName,9);AutoScaleMode=AutoScaleMode.None;
@@ -47,7 +48,8 @@ namespace UlanziLite {
             deck.Status+=(ok,text)=>OnUI(()=>{status.Text=text;status.Tone=ok?Tone.Positive:Tone.Warning;tips.SetToolTip(status,text);LayoutHeader();Program.Log(text);});
             deck.Input+=(index,state)=>OnUI(()=>HandleInput(index,state));
             deck.Connected+=()=>OnUI(async()=>await SyncDeck());
-            if(!preview)Shown+=(s,e)=>{deck.Start(); RefreshAudio();};
+            if(startInTray){Opacity=0;ShowInTaskbar=false;}
+            Shown+=(s,e)=>{if(startInTray){Hide();Opacity=1;ShowInTaskbar=true;}if(!preview){deck.Start(); RefreshAudio();}};
             timer=new System.Windows.Forms.Timer {Interval=250}; timer.Tick+=async(s,e)=>{audio.TrackForeground();await ApplyBrightness();if(++ticks%4==0 && Visible){RefreshAudio();if(!wideState.WantsAudio(uptime.ElapsedMilliseconds))PreviewClock();}await PumpWebsiteIcons();await PumpWideDisplay();await PumpUsageDisplay();}; if(!preview)timer.Start();
             FormClosing+=(s,e)=>{if(!exiting && e.CloseReason==CloseReason.UserClosing){e.Cancel=true;Hide();}else{if(!FinishEditing()){e.Cancel=true;exiting=false;return;}timer.Stop();deck.Dispose();if(tray!=null){tray.Visible=false;tray.Dispose();}}};
         }
@@ -105,6 +107,8 @@ namespace UlanziLite {
             tips.SetToolTip(brightness,"Device brightness");tips.SetToolTip(brightnessIcon,"Device brightness");
             dataButton=ButtonAt(canvas,"Data folder",Theme.Folder,ButtonKind.Ghost,()=>{try{Process.Start(new ProcessStartInfo(AppDomain.CurrentDomain.BaseDirectory){UseShellExecute=true});}catch(Exception ex){Feedback(ex.Message,true);}});
             guideButton=ButtonAt(canvas,"Guide",Theme.Help,ButtonKind.Ghost,ShowGuide,"Quick guide");
+            startupButton=ButtonAt(canvas,"","\uE713",ButtonKind.Ghost,ShowStartupSettings,"Startup settings");
+            tips.SetToolTip(startupButton,"Startup settings");
             tips.SetToolTip(dataButton,"Open data folder");tips.SetToolTip(guideButton,"Quick guide");
             headerRule=Rule(canvas);
         }
@@ -227,6 +231,7 @@ namespace UlanziLite {
                 int w=canvas.ClientSize.Width,cx=w-S(12),cy=S(15),hh=S(32);
                 appMark.Bounds=new Rectangle(S(12),S(17),S(30),S(30));appTitle.Bounds=new Rectangle(S(50),cy,S(120),hh);appSubtitle.Visible=false;
                 guideButton.Text=dataButton.Text="";
+                startupButton.Bounds=new Rectangle(cx-=S(32),cy,S(32),hh);cx-=S(4);
                 guideButton.Bounds=new Rectangle(cx-=S(32),cy,S(32),hh);dataButton.Bounds=new Rectangle(cx-=S(36),cy,S(32),hh);
                 brightnessValue.Bounds=new Rectangle(cx-=S(42),cy,S(38),hh);brightness.Bounds=new Rectangle(cx-=S(100),cy,S(96),hh);brightnessIcon.Bounds=new Rectangle(cx-=S(28),cy,S(24),hh);
                 status.Bounds=new Rectangle(S(180),cy,Math.Max(S(80),Math.Min(status.PreferredWidth(),cx-S(192))),hh);return;
@@ -236,6 +241,7 @@ namespace UlanziLite {
             appMark.Bounds=new Rectangle(pad,S(20),S(36),S(36));
             appTitle.Bounds=new Rectangle(pad+S(48),S(14),S(280),S(30));appSubtitle.Bounds=new Rectangle(pad+S(49),S(42),S(300),S(20));
             int x=width-pad;
+            startupButton.Bounds=new Rectangle(x-=S(36),y,S(32),h);
             guideButton.Bounds=new Rectangle(x-=S(84),y,S(84),h);
             dataButton.Bounds=new Rectangle(x-=S(118)+S(4),y,S(118),h);
             x-=S(20);brightnessValue.Bounds=new Rectangle(x-=S(40),y,S(40),h);
@@ -355,8 +361,10 @@ namespace UlanziLite {
         }
         void BuildTray() {
             var menu=new ContextMenuStrip(); menu.Items.Add("Open settings",null,(s,e)=>ShowEditor());menu.Items.Add("Exit",null,(s,e)=>{exiting=true;Close();});
+            menu.Items.Insert(1,new ToolStripMenuItem("Startup settings",null,(s,e)=>{ShowEditor();ShowStartupSettings();}));
             tray=new NotifyIcon {Icon=Icon,Text=WindowTitle,Visible=true,ContextMenuStrip=menu};tray.DoubleClick+=(s,e)=>ShowEditor();
         }
+        void ShowStartupSettings() {using(var dialog=new StartupSettingsForm(config,previewMode,SaveConfiguration))dialog.ShowDialog(this);}
         void ShowEditor() {Show();WindowState=FormWindowState.Normal;FitToScreen(false);Activate();}
         protected override void OnLoad(EventArgs e) {base.OnLoad(e);FitToScreen(true);}
         // Keep the whole window on one monitor, e.g. a portrait screen narrower than the default size.

@@ -19,7 +19,7 @@ Requires Windows 10/11 x64 and .NET Framework 4.5 or later.
 3. Run `UlanziLite.exe` from File Explorer. Administrator privileges are not required.
 4. Select a button, edit its action, and choose **Save and apply to device**.
 
-You can edit and save without a connected device. The saved current page is applied automatically when it connects. The app does not install itself or register for startup.
+You can edit and save without a connected device. The saved current page is applied automatically when it connects. Automatic startup is off by default.
 
 ## Make the buttons yours
 
@@ -76,6 +76,10 @@ The wide display shows your PC's local time and date, with English weekday names
 The clock shows large hours and minutes and updates once per minute to reduce USB traffic. All device images reserve the bottom 5% for the viewing angle. The interface uses Segoe UI with Arial fallback; numbers use Bahnschrift with Segoe UI fallback. No font installation is required. Custom Unicode labels remain supported through Windows font fallback.
 
 Closing the window hides it to the tray. Double-click the tray icon to reopen it; choose **Exit** in the tray menu to quit.
+
+Choose the **Startup settings** gear in the header, or **Startup settings** in the tray menu. **Start when I sign in to Windows** registers this executable for your Windows account without administrator privileges. **Start in the system tray** hides the editor on launch while device control continues; double-click the tray icon to open it. Choose **Apply** to save both options. The tray preference also applies when launching manually.
+
+Keep the executable in its current folder after enabling startup. If you move it, enable startup again from the new location. Disable startup before deleting the app. Ulanzi Studio's startup registration is left as configured; quit Studio and disable its automatic startup separately if it competes for the device.
 
 ## Settings and troubleshooting
 

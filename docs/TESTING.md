@@ -21,6 +21,8 @@ Builds treat warnings as errors. `test.ps1` waits for the GUI executable and che
 
 Self-tests and rendering do not connect to USB or save user settings. File replacement tests use temporary directories and clean up afterward. Usage tests use synthetic responses to check Codex, Claude, and Gemini parsing, used-percentage direction, missing values, resets, and caching without credentials or network access.
 
+Startup tests use a temporary registry key outside Windows' Run key, then remove it. They check quoted executable paths, existing script registrations, enable/disable, preservation of other entries, and rollback after a settings-save failure. Preview mode disables startup changes. The startup dialog is rendered to `startup-preview.png`.
+
 Display refresh tests alternate clock and usage updates around one- and two-minute boundaries. They verify that each ZIP includes all 14 display images and preserves other buttons and the latest clock image. They also check unchanged usage suppression and coalescing usage changes into wide-display uploads. Rendered application examples depend on the machine's Start menu. Run audio tests separately on a PC with an output device; CI does not assume one exists.
 
 Website icon tests use synthetic responses for redirects, relative icons, HTML base URLs, shortcut path/query exclusion, ICO fallback, memory/disk caching, custom-image precedence, invalid/offline fallback, and retry intervals.
@@ -44,6 +46,7 @@ Run from File Explorer with Studio fully closed:
 - Check overlay expiration, extension after repeated input, clock restoration, and updates during page changes.
 - Leave the app running for at least five minutes and two usage queries. Verify all meters remain visible and check for flicker or input delays.
 - Switch buttons/pages while editing; save/cancel; hide, restore, and exit through the tray.
+- Apply startup and tray preferences, restart, confirm the editor stays hidden and device control works, then reopen via the tray. Sign out/in to check Windows startup; disable it afterward and verify it no longer launches. Check Studio is closed.
 - Check clipping, scrolling, and keyboard focus at 100%, 150%, and 200% scaling.
 
 Automated tests cannot prove physical display appearance, audible results, or compatibility with all firmware. Record manual results with OS, scaling, and firmware versions.

@@ -43,7 +43,7 @@ namespace UlanziLite {
             string startupProblem=RuntimeContext.StartupProblem();
             if(startupProblem!=null){Log(startupProblem+" "+RuntimeContext.Describe());return 2;}
             bool first;using(var mutex=new Mutex(true,"Local\\Geniuskey.UlanziLite.D200X",out first)) {
-                if(!first){MessageBox.Show("Already running. Open Ulanzi Lite from the system tray.","Ulanzi Lite");return 0;}
+                if(!first){if(!args.Contains("--startup"))MessageBox.Show("Already running. Open Ulanzi Lite from the system tray.","Ulanzi Lite");return 0;}
                 Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);
                 Application.ThreadException+=(s,e)=>{Log(e.Exception.ToString());MessageBox.Show(e.Exception.Message,"Ulanzi Lite");};
                 try {Log("Starting interactive controller. "+RuntimeContext.Describe());var configuration=Configuration.Load();Application.Run(new MainForm(configuration));return 0;}
